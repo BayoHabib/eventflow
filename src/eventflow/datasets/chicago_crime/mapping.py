@@ -45,8 +45,8 @@ def clean_chicago_data(lf: pl.LazyFrame) -> pl.LazyFrame:
         Cleaned LazyFrame
     """
     logger.info("Applying data cleaning to Chicago crime data")
-    # Parse date column
-    lf = lf.with_columns([pl.col("date").str.to_datetime("%m/%d/%Y %I:%M:%S %p").alias("date")])
+    # Parse date column (accept multiple formats; non-parseable -> null)
+    lf = lf.with_columns([pl.col("date").str.to_datetime(strict=False).alias("date")])
 
     # Cast coordinates to floats before filtering
     lf = lf.with_columns(
