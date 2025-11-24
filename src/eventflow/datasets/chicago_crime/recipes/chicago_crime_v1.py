@@ -5,6 +5,7 @@ from eventflow.core.pipeline import Pipeline, Step
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.schema import RecipeConfig
 from eventflow.core import spatial, temporal, features
+import polars as pl
 
 
 class ChicagoCrimeV1Recipe(BaseRecipe):
@@ -32,18 +33,46 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
         """Build the transformation pipeline."""
         grid_config = self.config.grid
         temporal_config = self.config.temporal
+        grid_size = grid_config.get("size_m", 300)
+        target_crs = grid_config.get("crs", "EPSG:26971")
+        time_bin = temporal_config.get("time_bin", "6h")
+        temporal_components = temporal_config.get("components", ["hour_of_day", "day_of_week"])
+
+        class TimestampCastStep(Step):
+            """Ensure timestamp column is datetime."""
+
+            def run(self, ef: EventFrame) -> EventFrame:
+                ts = ef.schema.timestamp_col
+                lf = ef.lazy_frame.with_columns(pl.col(ts).str.to_datetime(strict=False))
+                return ef.with_lazy_frame(lf)
 
         class SpatialGridStep(Step):
             """Add spatial grid."""
 
-            def __init__(self, size_m: float):
+            def __init__(self, size_m: float, target_crs: str):
                 self.size_m = size_m
+                self.target_crs = target_crs
 
             def run(self, ef: EventFrame) -> EventFrame:
-                # Transform to projected CRS
-                ef = spatial.transform_crs(ef, "EPSG:26971")
-                # Create and assign grid (simplified - real implementation would be more robust)
-                return ef.with_columns(grid_id=None)  # Placeholder
+                # Transform to projected CRS and use projected columns for grid assignment
+                ef_proj = spatial.transform_crs(ef, self.target_crs)
+                lf = ef_proj.lazy_frame
+                lon_proj = "longitude_proj"
+                lat_proj = "latitude_proj"
+
+                # Compute bounds from projected columns
+                stats = lf.select(
+                    [
+                        pl.col(lon_proj).min().alias("minx"),
+                        pl.col(lat_proj).min().alias("miny"),
+                        pl.col(lon_proj).max().alias("maxx"),
+                        pl.col(lat_proj).max().alias("maxy"),
+                    ]
+                ).collect().row(0, named=True)
+                bounds = (stats["minx"], stats["miny"], stats["maxx"], stats["maxy"])
+
+                grid = spatial.create_grid(bounds=bounds, size_m=self.size_m, crs=self.target_crs)
+                return spatial.assign_to_grid(ef_proj, grid, lon_col=lon_proj, lat_col=lat_proj)
 
         class TemporalBinStep(Step):
             """Add time bins."""
@@ -74,11 +103,10 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
 
         return Pipeline(
             [
-                SpatialGridStep(size_m=grid_config.get("size_m", 300)),
-                TemporalBinStep(bin_size=temporal_config.get("time_bin", "6h")),
-                TemporalComponentsStep(
-                    components=temporal_config.get("components", ["hour_of_day", "day_of_week"])
-                ),
+                TimestampCastStep(),
+                SpatialGridStep(size_m=grid_size, target_crs=target_crs),
+                TemporalBinStep(bin_size=time_bin),
+                TemporalComponentsStep(components=temporal_components),
                 AggregationStep(),
             ]
         )

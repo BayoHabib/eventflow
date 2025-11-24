@@ -120,6 +120,8 @@ def create_grid(
 def assign_to_grid(
     event_frame: EventFrame,
     grid: pl.DataFrame,
+    lon_col: str | None = None,
+    lat_col: str | None = None,
 ) -> EventFrame:
     """
     Assign events to grid cells.
@@ -133,7 +135,10 @@ def assign_to_grid(
     """
     schema = event_frame.schema
 
-    if schema.lat_col is None or schema.lon_col is None:
+    lon_field = lon_col or schema.lon_col
+    lat_field = lat_col or schema.lat_col
+
+    if lon_field is None or lat_field is None:
         raise ValueError("EventFrame must have lat/lon columns for grid assignment")
 
     # Get grid parameters
@@ -153,12 +158,8 @@ def assign_to_grid(
     lf = (
         lf.with_columns(
             [
-                (((pl.col(schema.lon_col) - min_x) / grid_size).floor().cast(pl.Int32)).alias(
-                    "_col_idx"
-                ),
-                (((pl.col(schema.lat_col) - min_y) / grid_size).floor().cast(pl.Int32)).alias(
-                    "_row_idx"
-                ),
+                (((pl.col(lon_field) - min_x) / grid_size).floor().cast(pl.Int32)).alias("_col_idx"),
+                (((pl.col(lat_field) - min_y) / grid_size).floor().cast(pl.Int32)).alias("_row_idx"),
             ]
         )
         .with_columns(
