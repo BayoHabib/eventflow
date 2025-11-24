@@ -103,10 +103,10 @@ def validate(
     try:
         if "recipe" in config_dict:
             RecipeConfig(**config_dict)
-            typer.echo(f"✓ Valid recipe configuration: {config}")
+            typer.echo(f"Valid recipe configuration: {config}")
         elif "dataset_name" in config_dict:
             DatasetConfig(**config_dict)
-            typer.echo(f"✓ Valid dataset configuration: {config}")
+            typer.echo(f"Valid dataset configuration: {config}")
         else:
             typer.echo("Error: Unknown configuration type", err=True)
             raise typer.Exit(code=1)

@@ -1,7 +1,7 @@
 """Schema definitions for events and context sources."""
 
 from typing import Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EventSchema(BaseModel):
@@ -94,10 +94,7 @@ class EventMetadata(BaseModel):
     date_range: tuple[str, str] | None = None
     custom: dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        """Pydantic configuration."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class DatasetConfig(BaseModel):
