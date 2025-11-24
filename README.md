@@ -133,8 +133,9 @@ If you use Eventflow in your research, please cite:
 ```bibtex
 @software{eventflow2024,
   title = {Eventflow: A Generic Spatio-Temporal Event Transformation Engine},
-  author = {EventFlow Team},
+  author = {Habib Bayo},
   year = {2024},
   url = {https://github.com/eventflow/eventflow}
 }
 ```
+
