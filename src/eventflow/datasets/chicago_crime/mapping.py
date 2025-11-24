@@ -48,6 +48,14 @@ def clean_chicago_data(lf: pl.LazyFrame) -> pl.LazyFrame:
     # Parse date column
     lf = lf.with_columns([pl.col("date").str.to_datetime("%m/%d/%Y %I:%M:%S %p").alias("date")])
 
+    # Cast coordinates to floats before filtering
+    lf = lf.with_columns(
+        [
+            pl.col("latitude").cast(pl.Float64),
+            pl.col("longitude").cast(pl.Float64),
+        ]
+    )
+
     # Filter out rows with missing coordinates
     lf = lf.filter(pl.col("latitude").is_not_null() & pl.col("longitude").is_not_null())
 
