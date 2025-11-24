@@ -15,21 +15,19 @@ def aggregate_counts(
 ) -> EventFrame:
     """
     Compute event counts per group.
-    
+
     Args:
         event_frame: Input EventFrame
         group_by: Columns to group by (e.g., ["grid_id", "time_bin"])
         count_col: Name of count column
-        
+
     Returns:
         EventFrame with aggregated counts
     """
     logger.info(f"Aggregating counts by: {group_by}")
-    lf = event_frame.lazy_frame.group_by(group_by).agg([
-        pl.len().alias(count_col)
-    ])
+    lf = event_frame.lazy_frame.group_by(group_by).agg([pl.len().alias(count_col)])
     logger.debug(f"Created count column: {count_col}")
-    
+
     return event_frame.with_lazy_frame(lf)
 
 
@@ -41,33 +39,28 @@ def aggregate_by_category(
 ) -> EventFrame:
     """
     Compute counts per category within groups.
-    
+
     Args:
         event_frame: Input EventFrame
         group_by: Columns to group by
         category_col: Category column to count
         prefix: Prefix for output columns
-        
+
     Returns:
         EventFrame with category counts
     """
-    lf = event_frame.lazy_frame.group_by(group_by + [category_col]).agg([
-        pl.len().alias("_count")
-    ]).pivot(
-        index=group_by,
-        columns=category_col,
-        values="_count",
+    # Polars pivot operates on eager frames; collect, pivot, and return to lazy for downstream steps.
+    df = (
+        event_frame.lazy_frame.group_by(group_by + [category_col])
+        .agg([pl.len().alias("_count")])
+        .collect()
+        .pivot(index=group_by, on=category_col, values="_count")
     )
-    
-    # Rename columns with prefix
-    rename_map = {
-        col: f"{prefix}_{col}"
-        for col in lf.columns
-        if col not in group_by
-    }
-    lf = lf.rename(rename_map)
-    
-    return event_frame.with_lazy_frame(lf)
+
+    rename_map = {col: f"{prefix}_{col}" for col in df.columns if col not in group_by}
+    df = df.rename(rename_map)
+
+    return event_frame.with_lazy_frame(df.lazy())
 
 
 def moving_window_aggregation(
@@ -80,7 +73,7 @@ def moving_window_aggregation(
 ) -> EventFrame:
     """
     Compute moving window aggregations.
-    
+
     Args:
         event_frame: Input EventFrame
         window_size: Window size (e.g., "7d", "1h")
@@ -88,18 +81,18 @@ def moving_window_aggregation(
         agg_col: Column to aggregate
         agg_fn: Aggregation function ("mean", "sum", "min", "max", "std")
         output_col: Name of output column
-        
+
     Returns:
         EventFrame with moving window features
     """
     if output_col is None:
         output_col = f"{agg_col}_{agg_fn}_{window_size}"
-    
+
     timestamp_col = event_frame.schema.timestamp_col
-    
+
     # Sort by timestamp for window operations
     lf = event_frame.lazy_frame.sort(timestamp_col)
-    
+
     # Apply rolling aggregation
     if agg_fn == "mean":
         agg_expr = pl.col(agg_col).rolling_mean(window_size)
@@ -113,9 +106,9 @@ def moving_window_aggregation(
         agg_expr = pl.col(agg_col).rolling_std(window_size)
     else:
         raise ValueError(f"Unknown aggregation function: {agg_fn}")
-    
+
     lf = lf.with_columns([agg_expr.alias(output_col)])
-    
+
     return event_frame.with_lazy_frame(lf)
 
 
@@ -127,18 +120,18 @@ def lag_features(
 ) -> EventFrame:
     """
     Create lag features.
-    
+
     Args:
         event_frame: Input EventFrame
         lag_col: Column to create lags for
         lags: List of lag periods (e.g., [1, 7, 30])
         group_by: Optional grouping columns
-        
+
     Returns:
         EventFrame with lag features
     """
     lf = event_frame.lazy_frame.sort(event_frame.schema.timestamp_col)
-    
+
     exprs = []
     for lag in lags:
         if group_by:
@@ -146,9 +139,9 @@ def lag_features(
         else:
             expr = pl.col(lag_col).shift(lag).alias(f"{lag_col}_lag_{lag}")
         exprs.append(expr)
-    
+
     lf = lf.with_columns(exprs)
-    
+
     return event_frame.with_lazy_frame(lf)
 
 
@@ -160,7 +153,7 @@ def encode_categorical(
 ) -> EventFrame:
     """
     Encode categorical variables.
-    
+
     Args:
         event_frame: Input EventFrame
         col: Column to encode
@@ -169,39 +162,36 @@ def encode_categorical(
             - "ordinal": Ordinal encoding (0, 1, 2, ...)
             - "target": Target encoding (requires target column)
         prefix: Prefix for output columns
-        
+
     Returns:
         EventFrame with encoded features
     """
     if prefix is None:
         prefix = col
-    
+
     lf = event_frame.lazy_frame
-    
+
     logger.info(f"Encoding categorical column '{col}' using method '{method}'")
     if method == "onehot":
         # Get unique values
         unique_vals = lf.select(pl.col(col).unique()).collect()[col].to_list()
-        
+
         # Create binary columns
         exprs = [
-            (pl.col(col) == val).cast(pl.Int32).alias(f"{prefix}_{val}")
-            for val in unique_vals
+            (pl.col(col) == val).cast(pl.Int32).alias(f"{prefix}_{val}") for val in unique_vals
         ]
         lf = lf.with_columns(exprs)
-    
+
     elif method == "ordinal":
         # Create ordinal encoding
         unique_vals = lf.select(pl.col(col).unique().sort()).collect()[col].to_list()
         mapping = {val: idx for idx, val in enumerate(unique_vals)}
-        
-        lf = lf.with_columns([
-            pl.col(col).map_dict(mapping).alias(f"{col}_encoded")
-        ])
-    
+
+        lf = lf.with_columns([pl.col(col).replace(mapping).cast(pl.Int32).alias(f"{col}_encoded")])
+
     else:
         raise ValueError(f"Unknown encoding method: {method}")
-    
+
     return event_frame.with_lazy_frame(lf)
 
 
@@ -213,24 +203,23 @@ def compute_ratios(
 ) -> EventFrame:
     """
     Compute ratios between columns.
-    
+
     Args:
         event_frame: Input EventFrame
         numerator_col: Numerator column
         denominator_col: Denominator column
         output_col: Name of output column
-        
+
     Returns:
         EventFrame with ratio column
     """
     if output_col is None:
         output_col = f"{numerator_col}_per_{denominator_col}"
-    
-    lf = event_frame.lazy_frame.with_columns([
-        (pl.col(numerator_col) / pl.col(denominator_col).clip(1e-10))
-        .alias(output_col)
-    ])
-    
+
+    lf = event_frame.lazy_frame.with_columns(
+        [(pl.col(numerator_col) / pl.col(denominator_col).clip(1e-10)).alias(output_col)]
+    )
+
     return event_frame.with_lazy_frame(lf)
 
 
@@ -241,34 +230,34 @@ def normalize_features(
 ) -> EventFrame:
     """
     Normalize numeric features.
-    
+
     Args:
         event_frame: Input EventFrame
         cols: Columns to normalize
         method: Normalization method:
             - "zscore": Z-score normalization (mean=0, std=1)
             - "minmax": Min-max normalization (0-1)
-            
+
     Returns:
         EventFrame with normalized features
     """
     lf = event_frame.lazy_frame
-    
+
     if method == "zscore":
         exprs = [
-            ((pl.col(col) - pl.col(col).mean()) / pl.col(col).std())
-            .alias(f"{col}_normalized")
+            ((pl.col(col) - pl.col(col).mean()) / pl.col(col).std()).alias(f"{col}_normalized")
             for col in cols
         ]
     elif method == "minmax":
         exprs = [
-            ((pl.col(col) - pl.col(col).min()) / (pl.col(col).max() - pl.col(col).min()))
-            .alias(f"{col}_normalized")
+            ((pl.col(col) - pl.col(col).min()) / (pl.col(col).max() - pl.col(col).min())).alias(
+                f"{col}_normalized"
+            )
             for col in cols
         ]
     else:
         raise ValueError(f"Unknown normalization method: {method}")
-    
+
     lf = lf.with_columns(exprs)
-    
+
     return event_frame.with_lazy_frame(lf)

@@ -48,15 +48,15 @@ Create a new package under `src/eventflow/datasets/`:
 
 ```
 src/eventflow/datasets/your_dataset/
-├── __init__.py
-├── schema.py
-├── mapping.py
-├── context/
-│   ├── __init__.py
-│   └── your_context_source.py
-└── recipes/
-    ├── __init__.py
-    └── your_recipe_v1.py
+  __init__.py
+  schema.py
+  mapping.py
+  context/
+    __init__.py
+    your_context_source.py
+  recipes/
+    __init__.py
+    your_recipe_v1.py
 ```
 
 ### 2. Define Schema
@@ -87,19 +87,19 @@ from .schema import YOUR_DATASET_SCHEMA
 def load_your_dataset(raw_path: str) -> EventFrame:
     """Load your dataset as EventFrame."""
     lf = pl.scan_parquet(f"{raw_path}/**/*.parquet")
-    
+
     # Apply any necessary transformations
     lf = lf.with_columns([
         pl.col("timestamp").str.to_datetime(),
         # ... other transformations
     ])
-    
+
     metadata = EventMetadata(
         dataset_name="your_dataset",
         crs="EPSG:4326",
         time_zone="UTC",
     )
-    
+
     return EventFrame(lf, YOUR_DATASET_SCHEMA, metadata)
 ```
 
@@ -114,10 +114,10 @@ import polars as pl
 class YourContextSource(BaseContextSource):
     def __init__(self, data_path: str):
         self.data_path = data_path
-    
+
     def load(self) -> pl.LazyFrame:
         return pl.scan_parquet(self.data_path)
-    
+
     @property
     def schema(self) -> ContextSchema:
         return ContextSchema(
@@ -137,7 +137,7 @@ from eventflow.core.pipeline import Pipeline
 class YourDatasetV1Recipe(BaseRecipe):
     def __init__(self, config: RecipeConfig):
         self.config = config
-    
+
     def build_pipeline(self) -> Pipeline:
         return Pipeline([
             SpatialGridStep(size_m=self.config.grid.size_m),

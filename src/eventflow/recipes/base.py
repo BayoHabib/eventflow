@@ -9,7 +9,7 @@ from eventflow.core.schema import RecipeConfig
 class BaseRecipe(ABC):
     """
     Base class for all recipes.
-    
+
     A recipe encapsulates a complete feature engineering pipeline
     for a specific dataset and use case.
     """
@@ -17,7 +17,7 @@ class BaseRecipe(ABC):
     def __init__(self, config: RecipeConfig) -> None:
         """
         Initialize recipe.
-        
+
         Args:
             config: Recipe configuration
         """
@@ -28,7 +28,7 @@ class BaseRecipe(ABC):
     def build_pipeline(self) -> Pipeline:
         """
         Build the transformation pipeline.
-        
+
         Returns:
             Pipeline with all transformation steps
         """
@@ -37,10 +37,10 @@ class BaseRecipe(ABC):
     def run(self, event_frame: EventFrame) -> EventFrame:
         """
         Run the recipe on event data.
-        
+
         Args:
             event_frame: Input EventFrame
-            
+
         Returns:
             Transformed EventFrame with features
         """

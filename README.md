@@ -12,13 +12,13 @@ Eventflow is designed to transform raw event data into machine learning-ready fe
 
 ## Features
 
-- 🚀 **Lazy evaluation** with Polars for efficient data processing
-- 🗺️ **Spatial operations** with grid construction and zone assignment
-- ⏰ **Temporal features** including time binning and windowing
-- 🔗 **Context enrichment** from weather, events, demographics, etc.
-- 📊 **Experiment tracking** with pluggable backends (MLflow, etc.)
-- 🧪 **Recipe system** for composable feature engineering pipelines
-- 🛠️ **CLI interface** for running experiments and recipes
+- Lazy evaluation with Polars for efficient data processing
+- Spatial operations with grid construction and zone assignment
+- Temporal features including time binning and windowing
+- Context enrichment from weather, events, demographics, etc.
+- Experiment tracking with pluggable backends (MLflow, etc.)
+- Recipe system for composable feature engineering pipelines
+- CLI interface for running experiments and recipes
 
 ## Installation
 
@@ -71,16 +71,16 @@ eventflow list-recipes --dataset chicago_crime
 
 ```
 eventflow/
-├── src/eventflow/
-│   ├── core/           # Generic engine (dataset-agnostic)
-│   ├── datasets/       # Dataset-specific adapters
-│   ├── recipes/        # Recipe mechanism and registry
-│   ├── tracking/       # Experiment tracking (MLflow, etc.)
-│   └── cli/            # Command-line interface
-├── configs/            # YAML configurations
-├── docs/               # Documentation
-├── scripts/            # Example scripts
-└── tests/              # Unit and integration tests
+  src/eventflow/
+    core/        # Generic engine (dataset-agnostic)
+    datasets/    # Dataset-specific adapters
+    recipes/     # Recipe mechanism and registry
+    tracking/    # Experiment tracking (MLflow, etc.)
+    cli/         # Command-line interface
+  configs/       # YAML configurations
+  docs/          # Documentation
+  scripts/       # Example scripts
+  tests/         # Unit and integration tests
 ```
 
 ## Architecture

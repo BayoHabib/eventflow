@@ -17,33 +17,33 @@ def run(
 ) -> None:
     """
     Run a recipe on a dataset.
-    
+
     Example:
         eventflow run --dataset chicago_crime --recipe chicago_crime_v1 --config configs/recipes/chicago_crime_v1.yaml
     """
     from eventflow.recipes.registry import get_recipe
     from eventflow.core.schema import RecipeConfig
-    
+
     typer.echo(f"Running recipe '{recipe}' on dataset '{dataset}'...")
-    
+
     # Load config
     config_path = Path(config)
     if not config_path.exists():
         typer.echo(f"Error: Config file not found: {config}", err=True)
         raise typer.Exit(code=1)
-    
+
     with open(config_path) as f:
         config_dict = yaml.safe_load(f)
-    
+
     recipe_config = RecipeConfig(**config_dict)
-    
+
     # Get recipe
     try:
         recipe_instance = get_recipe(dataset, recipe, recipe_config)
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
-    
+
     typer.echo(f"Recipe loaded: {recipe_instance}")
     typer.echo("Note: Full execution requires loading dataset - implement in your script")
 
@@ -52,31 +52,31 @@ def run(
 def list_datasets() -> None:
     """List all available datasets."""
     from eventflow.recipes.registry import list_datasets as get_datasets
-    
+
     datasets = get_datasets()
-    
+
     if not datasets:
         typer.echo("No datasets registered")
         return
-    
+
     typer.echo("Available datasets:")
     for dataset in datasets:
         typer.echo(f"  - {dataset}")
 
 
 @app.command()
-def list_recipes(
-    dataset: Optional[str] = typer.Option(None, help="Filter by dataset")
-) -> None:
+def list_recipes(dataset: Optional[str] = typer.Option(None, help="Filter by dataset")) -> None:
     """List all available recipes."""
     from eventflow.recipes.registry import list_recipes as get_recipes
-    
+
     recipes = get_recipes(dataset)
-    
+
     if not recipes:
-        typer.echo(f"No recipes found for dataset: {dataset}" if dataset else "No recipes registered")
+        typer.echo(
+            f"No recipes found for dataset: {dataset}" if dataset else "No recipes registered"
+        )
         return
-    
+
     typer.echo("Available recipes:")
     for ds, recipe_list in recipes.items():
         typer.echo(f"\n{ds}:")
@@ -90,15 +90,15 @@ def validate(
 ) -> None:
     """Validate a configuration file."""
     from eventflow.core.schema import RecipeConfig, DatasetConfig
-    
+
     config_path = Path(config)
     if not config_path.exists():
         typer.echo(f"Error: Config file not found: {config}", err=True)
         raise typer.Exit(code=1)
-    
+
     with open(config_path) as f:
         config_dict = yaml.safe_load(f)
-    
+
     # Try to parse as recipe config
     try:
         if "recipe" in config_dict:
@@ -119,6 +119,7 @@ def validate(
 def version() -> None:
     """Show eventflow version."""
     from eventflow import __version__
+
     typer.echo(f"eventflow version {__version__}")
 
 

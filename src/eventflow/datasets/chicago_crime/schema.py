@@ -30,10 +30,10 @@ CHICAGO_CRIME_SCHEMA = EventSchema(
 def create_chicago_metadata(**kwargs) -> EventMetadata:
     """
     Create metadata for Chicago Crime dataset.
-    
+
     Args:
         **kwargs: Additional metadata fields
-        
+
     Returns:
         EventMetadata instance
     """

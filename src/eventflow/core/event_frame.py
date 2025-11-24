@@ -11,10 +11,10 @@ logger = get_logger(__name__)
 class EventFrame:
     """
     Central abstraction for event data.
-    
+
     Wraps a Polars LazyFrame with schema and metadata, providing a rich API
     for spatio-temporal transformations while maintaining lazy evaluation.
-    
+
     Attributes:
         lazy_frame: The underlying Polars LazyFrame
         schema: The event schema describing column structure
@@ -29,7 +29,7 @@ class EventFrame:
     ) -> None:
         """
         Initialize an EventFrame.
-        
+
         Args:
             lazy_frame: Polars LazyFrame containing the event data
             schema: Schema describing the event structure
@@ -46,10 +46,10 @@ class EventFrame:
     def with_lazy_frame(self, lazy_frame: pl.LazyFrame) -> "EventFrame":
         """
         Create a new EventFrame with a different LazyFrame.
-        
+
         Args:
             lazy_frame: New LazyFrame to wrap
-            
+
         Returns:
             New EventFrame with updated LazyFrame
         """
@@ -58,10 +58,10 @@ class EventFrame:
     def with_metadata(self, **updates: Any) -> "EventFrame":
         """
         Create a new EventFrame with updated metadata.
-        
+
         Args:
             **updates: Metadata fields to update
-            
+
         Returns:
             New EventFrame with updated metadata
         """
@@ -71,7 +71,7 @@ class EventFrame:
     def collect(self) -> pl.DataFrame:
         """
         Materialize the lazy frame into a DataFrame.
-        
+
         Returns:
             Collected Polars DataFrame
         """
@@ -83,10 +83,10 @@ class EventFrame:
     def head(self, n: int = 5) -> pl.DataFrame:
         """
         Collect the first n rows.
-        
+
         Args:
             n: Number of rows to collect
-            
+
         Returns:
             DataFrame with first n rows
         """
@@ -95,7 +95,7 @@ class EventFrame:
     def describe(self) -> pl.DataFrame:
         """
         Get descriptive statistics about the event data.
-        
+
         Returns:
             DataFrame with statistics
         """
@@ -104,10 +104,10 @@ class EventFrame:
     def select(self, *exprs: pl.Expr | str) -> "EventFrame":
         """
         Select columns from the event frame.
-        
+
         Args:
             *exprs: Column expressions or names to select
-            
+
         Returns:
             New EventFrame with selected columns
         """
@@ -116,10 +116,10 @@ class EventFrame:
     def filter(self, *predicates: pl.Expr) -> "EventFrame":
         """
         Filter rows based on predicates.
-        
+
         Args:
             *predicates: Boolean expressions for filtering
-            
+
         Returns:
             New EventFrame with filtered rows
         """
@@ -128,26 +128,26 @@ class EventFrame:
     def with_columns(self, *exprs: pl.Expr, **named_exprs: pl.Expr) -> "EventFrame":
         """
         Add or transform columns.
-        
+
         Args:
             *exprs: Column expressions
             **named_exprs: Named column expressions
-            
+
         Returns:
             New EventFrame with added/transformed columns
         """
-        return self.with_lazy_frame(
-            self.lazy_frame.with_columns(*exprs, **named_exprs)
-        )
+        return self.with_lazy_frame(self.lazy_frame.with_columns(*exprs, **named_exprs))
 
-    def sort(self, by: str | pl.Expr | list[str | pl.Expr], descending: bool = False) -> "EventFrame":
+    def sort(
+        self, by: str | pl.Expr | list[str | pl.Expr], descending: bool = False
+    ) -> "EventFrame":
         """
         Sort the event frame.
-        
+
         Args:
             by: Column(s) to sort by
             descending: Sort in descending order
-            
+
         Returns:
             New sorted EventFrame
         """
@@ -156,7 +156,7 @@ class EventFrame:
     def count(self) -> int:
         """
         Count the number of events.
-        
+
         Returns:
             Number of events
         """

@@ -27,7 +27,5 @@ def sample_events():
         "type": ["A", "B", "A"],
         "value": [1, 2, 3],
     }
-    
-    return pl.DataFrame(data).with_columns([
-        pl.col("timestamp").str.to_datetime()
-    ])
+
+    return pl.DataFrame(data).with_columns([pl.col("timestamp").str.to_datetime()])
