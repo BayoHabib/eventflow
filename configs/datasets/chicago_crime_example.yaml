@@ -1,0 +1,11 @@
+dataset_name: chicago_crime
+raw_root: "data/raw/chicago_crime"
+layout: "nested"
+crs: "EPSG:26971"  # NAD83 / Illinois East (meters)
+time_zone: "America/Chicago"
+
+# Optional data quality settings
+quality:
+  min_year: 2001
+  max_missing_coords: 0.05  # 5% tolerance for missing coordinates
+  outlier_detection: true

@@ -1,0 +1,49 @@
+dataset: "chicago_crime"
+recipe: "chicago_crime_v1"
+
+# Spatial configuration
+grid:
+  size_m: 300  # 300m x 300m grid cells
+  buffer_m: 0  # No buffer around grid
+
+# Temporal configuration
+temporal:
+  time_bin: "6h"  # 6-hour time bins
+  components:
+    - hour_of_day
+    - day_of_week
+    - month
+    - is_weekend
+
+# Feature engineering
+features:
+  # Basic counts per grid cell and time bin
+  count_features: true
+  
+  # Category-specific features
+  categorical_features:
+    - primary_type
+    - location_description
+  
+  # Aggregation windows (moving windows)
+  aggregation_windows:
+    - "1d"
+    - "7d"
+    - "30d"
+
+# Context enrichment (disabled for baseline)
+context:
+  weather:
+    enabled: false
+  events:
+    enabled: false
+  demographics:
+    enabled: false
+
+# Output configuration
+output:
+  format: "parquet"
+  compression: "snappy"
+  partition_by:
+    - year
+    - month
