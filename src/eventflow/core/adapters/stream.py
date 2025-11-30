@@ -201,7 +201,7 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
 
         # Make timestamps relative to origin
         origin_val: float = float(origin) if origin is not None else 0.0
-        timestamps: np.ndarray = ts_numeric - origin_val
+        timestamps = ts_numeric - origin_val  # type: ignore[operator]
 
         # Apply time scaling
         time_scale_params: dict[str, float] = {"origin": origin}
