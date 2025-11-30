@@ -1,8 +1,43 @@
 """Schema definitions for events and context sources."""
 
+from __future__ import annotations
+
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class OutputModality(str, Enum):
+    """Enumerates supported output modalities for derived artefacts."""
+
+    TABLE = "table"
+    SEQUENCE = "sequence"
+    RASTER = "raster"
+    GRAPH = "graph"
+    STREAM = "stream"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial wrapper
+        return self.value
+
+
+class FeatureProvenance(BaseModel):
+    """Record describing how a feature was produced during a pipeline run."""
+
+    produced_by: str | None = None
+    inputs: list[str] = Field(default_factory=list)
+    tags: set[str] = Field(default_factory=set)
+    description: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextRequirementState(BaseModel):
+    """Aggregate requirements needed to interpret the EventFrame correctly."""
+
+    spatial_crs: str | None = None
+    temporal_resolution: str | None = None
+    required_context: set[str] = Field(default_factory=set)
+    notes: dict[str, Any] = Field(default_factory=dict)
 
 
 class EventSchema(BaseModel):
@@ -16,6 +51,9 @@ class EventSchema(BaseModel):
         geometry_col: Name of geometry column (optional, alternative to lat/lon)
         categorical_cols: List of categorical attribute columns
         numeric_cols: List of numeric attribute columns
+        output_modalities: Supported downstream artefact modalities
+        feature_provenance: Provenance metadata keyed by feature name
+        context_requirements: Required context to interpret the data correctly
     """
 
     timestamp_col: str
@@ -24,6 +62,9 @@ class EventSchema(BaseModel):
     geometry_col: str | None = None
     categorical_cols: list[str] = Field(default_factory=list)
     numeric_cols: list[str] = Field(default_factory=list)
+    output_modalities: set[OutputModality] = Field(default_factory=lambda: {OutputModality.TABLE})
+    feature_provenance: dict[str, FeatureProvenance] = Field(default_factory=dict)
+    context_requirements: ContextRequirementState = Field(default_factory=ContextRequirementState)
 
     @field_validator("lat_col", "lon_col")
     @classmethod
@@ -38,6 +79,63 @@ class EventSchema(BaseModel):
 
         if not has_latlon and not has_geometry:
             raise ValueError("Either (lat_col and lon_col) or geometry_col must be provided")
+
+    def compatibility_issues(self, other: EventSchema) -> list[str]:
+        """Return human-readable compatibility issues when transitioning to *other*."""
+
+        issues: list[str] = []
+
+        if self.timestamp_col != other.timestamp_col:
+            issues.append(
+                "timestamp_col mismatch: " f"{self.timestamp_col!r} -> {other.timestamp_col!r}"
+            )
+
+        missing_modalities = {m for m in self.output_modalities if m not in other.output_modalities}
+        if missing_modalities:
+            issues.append(
+                "missing output modalities: "
+                + ", ".join(sorted(m.value for m in missing_modalities))
+            )
+
+        prev_features = set(self.feature_provenance)
+        new_features = set(other.feature_provenance)
+        missing_features = prev_features - new_features
+        if missing_features:
+            issues.append(
+                "missing feature provenance entries: " + ", ".join(sorted(missing_features))
+            )
+
+        prev_ctx = self.context_requirements
+        new_ctx = other.context_requirements
+
+        if prev_ctx.spatial_crs and not new_ctx.spatial_crs:
+            issues.append("spatial_crs removed")
+        elif (
+            prev_ctx.spatial_crs
+            and new_ctx.spatial_crs
+            and prev_ctx.spatial_crs != new_ctx.spatial_crs
+        ):
+            issues.append(
+                "spatial_crs mismatch: " f"{prev_ctx.spatial_crs!r} -> {new_ctx.spatial_crs!r}"
+            )
+
+        if prev_ctx.temporal_resolution and not new_ctx.temporal_resolution:
+            issues.append("temporal_resolution removed")
+        elif (
+            prev_ctx.temporal_resolution
+            and new_ctx.temporal_resolution
+            and prev_ctx.temporal_resolution != new_ctx.temporal_resolution
+        ):
+            issues.append(
+                "temporal_resolution mismatch: "
+                f"{prev_ctx.temporal_resolution!r} -> {new_ctx.temporal_resolution!r}"
+            )
+
+        missing_context = prev_ctx.required_context - new_ctx.required_context
+        if missing_context:
+            issues.append("missing required context tags: " + ", ".join(sorted(missing_context)))
+
+        return issues
 
 
 class ContextSchema(BaseModel):
@@ -69,25 +167,6 @@ class ContextSchema(BaseModel):
     def has_spatial(self) -> bool:
         """Check if schema has spatial dimension."""
         return self.spatial_col is not None or self.geometry_col is not None
-
-
-class FeatureProvenance(BaseModel):
-    """Record describing how a feature was produced during a pipeline run."""
-
-    produced_by: str | None = None
-    inputs: list[str] = Field(default_factory=list)
-    tags: set[str] = Field(default_factory=set)
-    description: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class ContextRequirementState(BaseModel):
-    """Aggregate requirements needed to interpret the EventFrame correctly."""
-
-    spatial_crs: str | None = None
-    temporal_resolution: str | None = None
-    required_context: set[str] = Field(default_factory=set)
-    notes: dict[str, Any] = Field(default_factory=dict)
 
 
 class EventMetadata(BaseModel):

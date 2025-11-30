@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
 
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.schema import EventMetadata, EventSchema
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
@@ -42,6 +43,8 @@ class Pipeline:
             steps: List of Step instances to apply in sequence
         """
         self.steps = steps
+        self._last_schema: EventSchema | None = None
+        self._last_metadata: EventMetadata | None = None
         logger.info(
             f"Created pipeline with {len(steps)} steps: {[s.__class__.__name__ for s in steps]}"
         )
@@ -58,18 +61,47 @@ class Pipeline:
         """
         logger.info(f"Starting pipeline execution with {len(self.steps)} steps")
         current = event_frame
+        self._last_schema = event_frame.schema
+        self._last_metadata = event_frame.metadata
 
         for i, step in enumerate(self.steps, 1):
             step_name = step.__class__.__name__
             logger.info(f"Step {i}/{len(self.steps)}: Executing {step_name}")
             try:
-                current = step.run(current)
-                logger.debug(f"Step {i}/{len(self.steps)}: {step_name} completed successfully")
+                previous_schema = current.schema
+                result = step.run(current)
+                if not isinstance(result, EventFrame):
+                    raise TypeError(
+                        f"Step {step_name} returned {type(result).__name__} instead of EventFrame"
+                    )
+
+                issues = previous_schema.compatibility_issues(result.schema)
+                if issues:
+                    issue_summary = "; ".join(issues)
+                    logger.error(
+                        "Step %s produced an incompatible schema: %s",
+                        step_name,
+                        issue_summary,
+                    )
+                    raise ValueError(
+                        f"Step {step_name} produced incompatible schema: {issue_summary}"
+                    )
+
+                current = result
+                self._last_schema = current.schema
+                self._last_metadata = current.metadata
+                logger.debug(
+                    "Step %s completed successfully; schema modalities=%s",
+                    step_name,
+                    sorted(mod.value for mod in current.schema.output_modalities),
+                )
             except Exception as e:
                 logger.error(f"Step {i}/{len(self.steps)}: {step_name} failed with error: {e}")
                 raise
 
         logger.info("Pipeline execution completed successfully")
+        self._last_schema = current.schema
+        self._last_metadata = current.metadata
         return current
 
     def add_step(self, step: Step) -> "Pipeline":
@@ -93,6 +125,18 @@ class Pipeline:
     def __len__(self) -> int:
         """Get the number of steps."""
         return len(self.steps)
+
+    @property
+    def last_schema(self) -> EventSchema | None:
+        """Return the schema produced by the most recent pipeline execution."""
+
+        return self._last_schema
+
+    @property
+    def last_metadata(self) -> EventMetadata | None:
+        """Return the metadata produced by the most recent pipeline execution."""
+
+        return self._last_metadata
 
 
 class LambdaStep(Step):
