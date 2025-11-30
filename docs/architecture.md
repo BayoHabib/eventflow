@@ -92,6 +92,12 @@ pipeline = Pipeline([
 result = pipeline.run(event_frame)
 ```
 
+For production workflows, steps can be registered centrally and resolved at runtime. The
+`eventflow.core.registry.StepRegistry` keeps track of reusable step classes, supports
+discoverability via tags, and can materialize a `Pipeline` from configuration-driven step
+definitions (for example, `config.features["steps"]` in a recipe). This enables a clean
+separation between step implementation and recipe assembly.
+
 ### Context Enrichment
 
 Multi-stage process:

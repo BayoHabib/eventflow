@@ -18,6 +18,7 @@ Eventflow is designed to transform raw event data into machine learning-ready fe
 - 🔗 **Context enrichment** from weather, events, demographics, etc.
 - 📊 **Experiment tracking** with pluggable backends (MLflow, etc.)
 - 🧪 **Recipe system** for composable feature engineering pipelines
+- 📚 **Step registry** for reusable, config-driven pipeline assembly
 - 🛠️ **CLI interface** for running experiments and recipes
 
 ## Installation
@@ -39,7 +40,11 @@ pip install eventflow[all]
 ## Quick Start
 
 ```python
+from eventflow.core import temporal
+from eventflow.core.event_frame import EventFrame
+from eventflow.core.schema import RecipeConfig
 from eventflow.datasets.chicago_crime import load_chicago_crime
+from eventflow.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCrimeV1Recipe
 from eventflow.recipes.registry import get_recipe
 
 # Load dataset
@@ -52,6 +57,31 @@ features = recipe.run(event_frame)
 # Collect results
 df = features.collect()
 print(df.head())
+
+# Build a pipeline from registered steps and configuration
+from eventflow.core.pipeline import Step
+from eventflow.core.registry import StepRegistry
+
+
+class TemporalBinsStep(Step):
+  def __init__(self, bin_size: str = "6h") -> None:
+    self.bin_size = bin_size
+
+  def run(self, event_frame: EventFrame) -> EventFrame:
+    return temporal.create_time_bins(event_frame, self.bin_size)
+
+
+registry = StepRegistry()
+registry.register("temporal_bins", TemporalBinsStep, tags={"temporal"})
+
+# Recipes consult config.features["steps"] when a registry is supplied
+recipe_config = RecipeConfig(
+  dataset="chicago_crime",
+  recipe="custom",
+  features={"steps": [{"name": "temporal_bins", "params": {"bin_size": "12h"}}]},
+)
+custom_recipe = ChicagoCrimeV1Recipe(recipe_config, step_registry=registry)
+features = custom_recipe.run(event_frame)
 ```
 
 ## Command-Line Interface

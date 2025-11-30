@@ -3,7 +3,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from .pipeline import Pipeline
+
+StepDefinition = str | tuple[str, Mapping[str, Any] | None] | Mapping[str, Any]
 
 from .pipeline import Step
 from .utils import get_logger
@@ -67,3 +72,43 @@ class StepRegistry:
         if tag is None:
             return specs
         return [spec for spec in specs if tag in spec.tags]
+
+    def create(
+        self,
+        name: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+    ) -> Step:
+        """Instantiate the step identified by *name* with optional params."""
+        spec = self.get(name)
+        kwargs = dict(params or {})
+        instance = spec.cls(**kwargs)
+        logger.debug("Instantiated step %s with params=%s", name, sorted(kwargs.keys()))
+        return instance
+
+    def build_pipeline(self, steps: Iterable[StepDefinition]) -> "Pipeline":
+        """Construct a Pipeline from an iterable of step definitions."""
+        from .pipeline import Pipeline  # Local import to avoid circular reference
+
+        instances: list[Step] = []
+        for entry in steps:
+            if isinstance(entry, str):
+                name = entry
+                params: Mapping[str, Any] | None = None
+            elif isinstance(entry, tuple) and len(entry) == 2:
+                name, params = entry
+            elif isinstance(entry, Mapping):
+                if "name" not in entry:
+                    raise ValueError("Step mapping must include a 'name' key")
+                name = entry["name"]  # type: ignore[index]
+                params = entry.get("params") or entry.get("config")
+            else:
+                raise TypeError(
+                    "Step definitions must be str, mapping with 'name', or (name, params) tuple"
+                )
+            if params is not None and not isinstance(params, Mapping):
+                raise TypeError("Step params must be a mapping when provided")
+            instances.append(self.create(name, params=params))
+
+        logger.debug("Built pipeline with steps=%s", [type(step).__name__ for step in instances])
+        return Pipeline(instances)
