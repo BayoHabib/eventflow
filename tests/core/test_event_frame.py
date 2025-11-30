@@ -4,7 +4,13 @@ import polars as pl
 import pytest
 
 from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema, FeatureProvenance
+from eventflow.core.schema import (
+    ContextRequirementState,
+    EventMetadata,
+    EventSchema,
+    FeatureProvenance,
+    OutputModality,
+)
 
 
 @pytest.fixture
@@ -86,10 +92,12 @@ def test_event_frame_register_feature_updates_metadata(sample_event_frame: Event
 
     assert updated.metadata.feature_catalog["lag_count_1h"] == info
     assert "table" in updated.metadata.output_modalities
+    assert OutputModality.TABLE in updated.schema.output_modalities
     provenance = updated.metadata.feature_provenance["lag_count_1h"]
     assert isinstance(provenance, FeatureProvenance)
     assert provenance.produced_by == "LagStep"
     assert provenance.description == "lagged count"
+    assert updated.schema.feature_provenance["lag_count_1h"] == provenance
 
 
 def test_event_frame_require_context(sample_event_frame: EventFrame) -> None:
@@ -110,3 +118,8 @@ def test_event_frame_require_context(sample_event_frame: EventFrame) -> None:
     assert requirements.temporal_resolution == "1h"
     assert requirements.required_context == {"weather", "demographics"}
     assert requirements.notes["reason"] == "grid aggregation"
+    assert isinstance(updated.schema.context_requirements, ContextRequirementState)
+    assert updated.schema.context_requirements.required_context == {
+        "weather",
+        "demographics",
+    }

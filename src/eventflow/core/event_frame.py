@@ -4,7 +4,13 @@ from typing import Any
 
 import polars as pl
 
-from eventflow.core.schema import EventMetadata, EventSchema, FeatureProvenance
+from eventflow.core.schema import (
+    ContextRequirementState,
+    EventMetadata,
+    EventSchema,
+    FeatureProvenance,
+    OutputModality,
+)
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
@@ -38,6 +44,34 @@ class EventFrame:
             metadata: Metadata about the dataset
         """
         self.lazy_frame = lazy_frame
+
+        # Synchronize schema/metadata enhanced descriptors to prevent drift.
+        combined_modalities = set(schema.output_modalities)
+        combined_modalities.update(OutputModality(mod) for mod in metadata.output_modalities)
+
+        if combined_modalities != set(schema.output_modalities):
+            schema = schema.model_copy(update={"output_modalities": combined_modalities})
+
+        metadata_modalities = {mod.value for mod in combined_modalities}
+        if metadata_modalities != set(metadata.output_modalities):
+            metadata = metadata.model_copy(update={"output_modalities": metadata_modalities})
+
+        combined_provenance = dict(metadata.feature_provenance)
+        combined_provenance.update(schema.feature_provenance)
+
+        if combined_provenance != metadata.feature_provenance:
+            metadata = metadata.model_copy(update={"feature_provenance": combined_provenance})
+        if combined_provenance != schema.feature_provenance:
+            schema = schema.model_copy(update={"feature_provenance": combined_provenance})
+
+        combined_requirements = _merge_context_requirements(
+            metadata.context_requirements, schema.context_requirements
+        )
+        if combined_requirements != metadata.context_requirements:
+            metadata = metadata.model_copy(update={"context_requirements": combined_requirements})
+        if combined_requirements != schema.context_requirements:
+            schema = schema.model_copy(update={"context_requirements": combined_requirements})
+
         self.schema = schema
         self.metadata = metadata
         logger.debug(
@@ -55,7 +89,7 @@ class EventFrame:
         Returns:
             New EventFrame with updated LazyFrame
         """
-        return EventFrame(lazy_frame, self.schema, self.metadata)
+        return self._spawn(lazy_frame=lazy_frame)
 
     def with_metadata(self, **updates: Any) -> "EventFrame":
         """
@@ -68,14 +102,44 @@ class EventFrame:
             New EventFrame with updated metadata
         """
         new_metadata = self.metadata.model_copy(update=updates)
-        return EventFrame(self.lazy_frame, self.schema, new_metadata)
+        return self._spawn(metadata=new_metadata)
+
+    def with_schema(self, **updates: Any) -> "EventFrame":
+        """Return a new EventFrame with schema updates applied immutably."""
+
+        new_schema = self.schema.model_copy(update=updates)
+        return self._spawn(schema=new_schema)
+
+    def _spawn(
+        self,
+        *,
+        lazy_frame: pl.LazyFrame | None = None,
+        schema: EventSchema | None = None,
+        metadata: EventMetadata | None = None,
+    ) -> "EventFrame":
+        """Internal helper to create new EventFrame instances preserving invariants."""
+
+        return EventFrame(
+            self.lazy_frame if lazy_frame is None else lazy_frame,
+            self.schema if schema is None else schema,
+            self.metadata if metadata is None else metadata,
+        )
 
     def add_output_modality(self, modality: str) -> "EventFrame":
         """Return a new EventFrame with the given output modality registered."""
-        modalities = set(self.metadata.output_modalities)
-        if modality not in modalities:
-            modalities.add(modality)
-        return self.with_metadata(output_modalities=modalities)
+        mod_enum = _coerce_modality(modality)
+
+        schema_modalities = set(self.schema.output_modalities)
+        if mod_enum not in schema_modalities:
+            schema_modalities.add(mod_enum)
+
+        metadata_modalities = set(self.metadata.output_modalities)
+        metadata_modalities.add(mod_enum.value)
+
+        return self._spawn(
+            schema=self.schema.model_copy(update={"output_modalities": schema_modalities}),
+            metadata=self.metadata.model_copy(update={"output_modalities": metadata_modalities}),
+        )
 
     def register_feature(
         self,
@@ -99,7 +163,6 @@ class EventFrame:
         catalog = dict(self.metadata.feature_catalog)
         catalog[name] = info
 
-        provenance_map = dict(self.metadata.feature_provenance)
         if provenance is None:
             provenance = FeatureProvenance(
                 produced_by=info.get("source_step"),
@@ -112,11 +175,19 @@ class EventFrame:
                     if k not in {"source_step", "inputs", "tags", "description"}
                 },
             )
-        provenance_map[name] = provenance
 
-        modalities = set(self.metadata.output_modalities)
+        metadata_provenance = dict(self.metadata.feature_provenance)
+        metadata_provenance[name] = provenance
+
+        schema_provenance = dict(self.schema.feature_provenance)
+        schema_provenance[name] = provenance
+
+        schema_modalities = set(self.schema.output_modalities)
+        metadata_modalities = set(self.metadata.output_modalities)
         if modality:
-            modalities.add(modality)
+            mod_enum = _coerce_modality(modality)
+            schema_modalities.add(mod_enum)
+            metadata_modalities.add(mod_enum.value)
 
         logger.debug(
             "Registering feature '%s' (modality=%s) on dataset '%s'",
@@ -125,10 +196,20 @@ class EventFrame:
             self.metadata.dataset_name,
         )
 
-        return self.with_metadata(
-            feature_catalog=catalog,
-            feature_provenance=provenance_map,
-            output_modalities=modalities,
+        return self._spawn(
+            schema=self.schema.model_copy(
+                update={
+                    "feature_provenance": schema_provenance,
+                    "output_modalities": schema_modalities,
+                }
+            ),
+            metadata=self.metadata.model_copy(
+                update={
+                    "feature_catalog": catalog,
+                    "feature_provenance": metadata_provenance,
+                    "output_modalities": metadata_modalities,
+                }
+            ),
         )
 
     def require_context(
@@ -141,111 +222,71 @@ class EventFrame:
     ) -> "EventFrame":
         """Return a new EventFrame with updated context requirements."""
 
-        requirements = self.metadata.context_requirements.model_copy(deep=True)
+        metadata_req = self.metadata.context_requirements.model_copy(deep=True)
+        schema_req = self.schema.context_requirements.model_copy(deep=True)
 
-        if spatial_crs:
-            requirements.spatial_crs = spatial_crs
-        if temporal_resolution:
-            requirements.temporal_resolution = temporal_resolution
-        if context_tags:
-            requirements.required_context.update(context_tags)
-        if notes:
-            requirements.notes.update(notes)
+        for requirement in (metadata_req, schema_req):
+            if spatial_crs:
+                requirement.spatial_crs = spatial_crs
+            if temporal_resolution:
+                requirement.temporal_resolution = temporal_resolution
+            if context_tags:
+                requirement.required_context.update(context_tags)
+            if notes:
+                requirement.notes.update(notes)
 
-        return self.with_metadata(context_requirements=requirements)
+        merged = _merge_context_requirements(metadata_req, schema_req)
+
+        return self._spawn(
+            schema=self.schema.model_copy(update={"context_requirements": merged}),
+            metadata=self.metadata.model_copy(update={"context_requirements": merged}),
+        )
 
     def collect(self) -> pl.DataFrame:
-        """
-        Materialize the lazy frame into a DataFrame.
+        """Materialize the lazy frame into a DataFrame."""
 
-        Returns:
-            Collected Polars DataFrame
-        """
-        logger.debug(f"Collecting EventFrame for dataset '{self.metadata.dataset_name}'")
+        logger.debug("Collecting EventFrame for dataset '%s'", self.metadata.dataset_name)
         df = self.lazy_frame.collect()
-        logger.info(f"Collected {len(df)} rows, {len(df.columns)} columns")
+        logger.info("Collected %s rows, %s columns", len(df), len(df.columns))
         return df
 
     def head(self, n: int = 5) -> pl.DataFrame:
-        """
-        Collect the first n rows.
+        """Collect the first *n* rows."""
 
-        Args:
-            n: Number of rows to collect
-
-        Returns:
-            DataFrame with first n rows
-        """
         return self.lazy_frame.head(n).collect()
 
     def describe(self) -> pl.DataFrame:
-        """
-        Get descriptive statistics about the event data.
+        """Return descriptive statistics about the event data."""
 
-        Returns:
-            DataFrame with statistics
-        """
         return self.lazy_frame.describe()
 
     def select(self, *exprs: pl.Expr | str) -> "EventFrame":
-        """
-        Select columns from the event frame.
+        """Return a new EventFrame selecting the provided expressions."""
 
-        Args:
-            *exprs: Column expressions or names to select
-
-        Returns:
-            New EventFrame with selected columns
-        """
         return self.with_lazy_frame(self.lazy_frame.select(*exprs))
 
     def filter(self, *predicates: pl.Expr) -> "EventFrame":
-        """
-        Filter rows based on predicates.
+        """Return a new EventFrame filtered by the predicates."""
 
-        Args:
-            *predicates: Boolean expressions for filtering
-
-        Returns:
-            New EventFrame with filtered rows
-        """
         return self.with_lazy_frame(self.lazy_frame.filter(*predicates))
 
     def with_columns(self, *exprs: pl.Expr, **named_exprs: pl.Expr) -> "EventFrame":
-        """
-        Add or transform columns.
+        """Return a new EventFrame with additional or transformed columns."""
 
-        Args:
-            *exprs: Column expressions
-            **named_exprs: Named column expressions
-
-        Returns:
-            New EventFrame with added/transformed columns
-        """
         return self.with_lazy_frame(self.lazy_frame.with_columns(*exprs, **named_exprs))
 
     def sort(
-        self, by: str | pl.Expr | list[str | pl.Expr], descending: bool = False
+        self,
+        by: str | pl.Expr | list[str | pl.Expr],
+        descending: bool = False,
     ) -> "EventFrame":
-        """
-        Sort the event frame.
+        """Return a new EventFrame sorted by *by*."""
 
-        Args:
-            by: Column(s) to sort by
-            descending: Sort in descending order
-
-        Returns:
-            New sorted EventFrame
-        """
         return self.with_lazy_frame(self.lazy_frame.sort(by, descending=descending))
 
     def count(self) -> int:
-        """
-        Count the number of events.
+        """Return the number of events."""
 
-        Returns:
-            Number of events
-        """
         df = self.lazy_frame.select(pl.len().alias("_count"))
         result = df.collect()
         rows = result.rows()
@@ -253,15 +294,66 @@ class EventFrame:
 
     def __repr__(self) -> str:
         """String representation of the EventFrame."""
+
         return (
-            f"EventFrame(\n"
+            "EventFrame(\n"
             f"  dataset={self.metadata.dataset_name},\n"
             f"  schema={self.schema.timestamp_col},\n"
             f"  crs={self.metadata.crs},\n"
             f"  time_zone={self.metadata.time_zone}\n"
-            f")"
+            ")"
         )
 
     def __len__(self) -> int:
-        """Get the number of events."""
+        """Return the number of events."""
+
         return self.count()
+
+
+def _coerce_modality(value: str | OutputModality) -> OutputModality:
+    """Normalise modality input into an OutputModality enum value."""
+
+    if isinstance(value, OutputModality):
+        return value
+    try:
+        return OutputModality(value)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported output modality: {value!r}") from exc
+
+
+def _merge_context_requirements(
+    left: ContextRequirementState, right: ContextRequirementState
+) -> ContextRequirementState:
+    """Combine two requirement states, preferring explicit entries."""
+
+    merged = ContextRequirementState(
+        spatial_crs=right.spatial_crs or left.spatial_crs,
+        temporal_resolution=right.temporal_resolution or left.temporal_resolution,
+        required_context=set(left.required_context) | set(right.required_context),
+        notes={**left.notes, **right.notes},
+    )
+
+    # If both provide spatial CRS but conflict, keep the right-hand value while logging.
+    if left.spatial_crs and right.spatial_crs and left.spatial_crs != right.spatial_crs:
+        logger.warning(
+            "Context requirement spatial CRS conflict detected: %s vs %s; keeping %s",
+            left.spatial_crs,
+            right.spatial_crs,
+            right.spatial_crs,
+        )
+        merged.spatial_crs = right.spatial_crs
+
+    if (
+        left.temporal_resolution
+        and right.temporal_resolution
+        and left.temporal_resolution != right.temporal_resolution
+    ):
+        logger.warning(
+            "Context requirement temporal resolution conflict detected: %s vs %s; keeping %s",
+            left.temporal_resolution,
+            right.temporal_resolution,
+            right.temporal_resolution,
+        )
+        merged.temporal_resolution = right.temporal_resolution
+
+    return merged

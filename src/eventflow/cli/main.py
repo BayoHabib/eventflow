@@ -1,11 +1,52 @@
 """Main CLI application using Typer."""
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 import yaml  # type: ignore[import-untyped]
 
+from eventflow.core.registry import (
+    ContextSourceRegistry,
+    FeatureStepRegistry,
+    OutputAdapterRegistry,
+)
+
 app = typer.Typer(help="Eventflow: Spatio-temporal event transformation engine")
+
+# --------------------------------------------------------------------------- #
+# Global registries (lazily populated via entry points on first access)
+# --------------------------------------------------------------------------- #
+_step_registry: FeatureStepRegistry | None = None
+_context_registry: ContextSourceRegistry | None = None
+_output_registry: OutputAdapterRegistry | None = None
+
+
+def get_step_registry() -> FeatureStepRegistry:
+    """Return the global step registry, loading entry points on first call."""
+    global _step_registry
+    if _step_registry is None:
+        _step_registry = FeatureStepRegistry()
+        _step_registry.load_entry_points()
+    return _step_registry
+
+
+def get_context_registry() -> ContextSourceRegistry:
+    """Return the global context source registry."""
+    global _context_registry
+    if _context_registry is None:
+        _context_registry = ContextSourceRegistry()
+        _context_registry.load_entry_points()
+    return _context_registry
+
+
+def get_output_registry() -> OutputAdapterRegistry:
+    """Return the global output adapter registry."""
+    global _output_registry
+    if _output_registry is None:
+        _output_registry = OutputAdapterRegistry()
+        _output_registry.load_entry_points()
+    return _output_registry
 
 
 @app.command()
@@ -37,9 +78,16 @@ def run(
 
     recipe_config = RecipeConfig(**config_dict)
 
-    # Get recipe
+    # Get recipe, injecting step registry so it can resolve step names
+    step_registry = get_step_registry()
+
     try:
-        recipe_instance = get_recipe(dataset, recipe, recipe_config)
+        recipe_instance = get_recipe(
+            dataset,
+            recipe,
+            recipe_config,
+            step_registry=step_registry,
+        )
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
@@ -121,6 +169,70 @@ def version() -> None:
     from eventflow import __version__
 
     typer.echo(f"eventflow version {__version__}")
+
+
+# --------------------------------------------------------------------------- #
+# Registry inspection commands
+# --------------------------------------------------------------------------- #
+
+
+@app.command()
+def list_steps(
+    tag: Annotated[str | None, typer.Option(help="Filter steps by tag")] = None,
+) -> None:
+    """List registered pipeline steps."""
+    registry = get_step_registry()
+    specs = registry.list(tag=tag)
+
+    if not specs:
+        typer.echo("No steps registered" + (f" with tag '{tag}'" if tag else ""))
+        return
+
+    typer.echo("Registered steps:")
+    for spec in specs:
+        tags_str = ", ".join(sorted(spec.tags)) if spec.tags else "none"
+        desc = spec.description or ""
+        typer.echo(f"  {spec.name}  [tags: {tags_str}]")
+        if desc:
+            typer.echo(f"      {desc}")
+
+
+@app.command()
+def list_context_sources() -> None:
+    """List registered context data sources."""
+    registry = get_context_registry()
+    specs = registry.list()
+
+    if not specs:
+        typer.echo("No context sources registered")
+        return
+
+    typer.echo("Registered context sources:")
+    for spec in specs:
+        tags_str = ", ".join(sorted(spec.tags)) if spec.tags else "none"
+        desc = spec.description or ""
+        typer.echo(f"  {spec.name}  [tags: {tags_str}]")
+        if desc:
+            typer.echo(f"      {desc}")
+
+
+@app.command()
+def list_output_adapters() -> None:
+    """List registered output adapters."""
+    registry = get_output_registry()
+    specs = registry.list()
+
+    if not specs:
+        typer.echo("No output adapters registered")
+        return
+
+    typer.echo("Registered output adapters:")
+    for spec in specs:
+        tags_str = ", ".join(sorted(spec.tags)) if spec.tags else "none"
+        desc = spec.description or ""
+        typer.echo(f"  {spec.name}  [tags: {tags_str}]")
+        if desc:
+            typer.echo(f"      {desc}")
 
 
 if __name__ == "__main__":
