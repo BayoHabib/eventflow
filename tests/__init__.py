@@ -1,4 +1,4 @@
 """Tests for eventflow."""
 
 # Test configuration
-pytest_plugins = []
+pytest_plugins: list[str] = []

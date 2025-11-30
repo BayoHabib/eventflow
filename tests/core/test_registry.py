@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 
 from eventflow.core.event_frame import EventFrame
-from eventflow.core.pipeline import Step
+from eventflow.core.pipeline import Pipeline, Step
 from eventflow.core.registry import StepRegistry
 from eventflow.core.schema import EventMetadata, EventSchema, RecipeConfig
 from eventflow.recipes.base import BaseRecipe
@@ -13,24 +13,24 @@ from eventflow.recipes.base import BaseRecipe
 class DummyStep(Step):
     """No-op step for testing."""
 
-    def run(self, event_frame):  # pragma: no cover - trivial pass-through
+    def run(self, event_frame: EventFrame) -> EventFrame:  # pragma: no cover - trivial pass-through
         return event_frame
 
 
 class AnotherStep(Step):
     """Another no-op for tagging tests."""
 
-    def run(self, event_frame):  # pragma: no cover - trivial pass-through
+    def run(self, event_frame: EventFrame) -> EventFrame:  # pragma: no cover - trivial pass-through
         return event_frame
 
 
 @pytest.fixture()
-def fresh_registry():
+def fresh_registry() -> StepRegistry:
     return StepRegistry()
 
 
 @pytest.fixture()
-def tiny_event_frame():
+def tiny_event_frame() -> EventFrame:
     """Minimal EventFrame for pipeline integration tests."""
 
     lf = pl.LazyFrame(
@@ -53,7 +53,7 @@ def tiny_event_frame():
     return EventFrame(lf, schema, metadata)
 
 
-def test_step_registry_register_and_get(fresh_registry):
+def test_step_registry_register_and_get(fresh_registry: StepRegistry) -> None:
     fresh_registry.register(
         name="dummy",
         step_cls=DummyStep,
@@ -70,7 +70,7 @@ def test_step_registry_register_and_get(fresh_registry):
     assert spec.config_schema == {"window": "int"}
 
 
-def test_step_registry_filters_by_tag(fresh_registry):
+def test_step_registry_filters_by_tag(fresh_registry: StepRegistry) -> None:
     fresh_registry.register("dummy", DummyStep, tags={"spatial"})
     fresh_registry.register("another", AnotherStep, tags={"temporal"})
 
@@ -82,18 +82,20 @@ def test_step_registry_filters_by_tag(fresh_registry):
     assert {spec.name for spec in all_specs} == {"dummy", "another"}
 
 
-def test_step_registry_rejects_duplicate_names(fresh_registry):
+def test_step_registry_rejects_duplicate_names(fresh_registry: StepRegistry) -> None:
     fresh_registry.register("dummy", DummyStep)
     with pytest.raises(ValueError):
         fresh_registry.register("dummy", AnotherStep)
 
 
-def test_step_registry_create_instantiates_step(fresh_registry):
+def test_step_registry_create_instantiates_step(fresh_registry: StepRegistry) -> None:
     class WithParamsStep(Step):
-        def __init__(self, label: str):
+        def __init__(self, label: str) -> None:
             self.label = label
 
-        def run(self, event_frame):  # pragma: no cover - simple pass-through
+        def run(
+            self, event_frame: EventFrame
+        ) -> EventFrame:  # pragma: no cover - simple pass-through
             return event_frame
 
     fresh_registry.register("with_params", WithParamsStep)
@@ -103,17 +105,19 @@ def test_step_registry_create_instantiates_step(fresh_registry):
     assert instance.label == "ok"
 
 
-def test_step_registry_build_pipeline_runs_steps(fresh_registry, tiny_event_frame):
+def test_step_registry_build_pipeline_runs_steps(
+    fresh_registry: StepRegistry, tiny_event_frame: EventFrame
+) -> None:
     class AddConstantStep(Step):
-        def __init__(self, column: str, value: int):
+        def __init__(self, column: str, value: int) -> None:
             self.column = column
             self.value = value
 
-        def run(self, event_frame):
+        def run(self, event_frame: EventFrame) -> EventFrame:
             return event_frame.with_columns(**{self.column: pl.lit(self.value)})
 
     class DoubleValueStep(Step):
-        def run(self, event_frame):
+        def run(self, event_frame: EventFrame) -> EventFrame:
             return event_frame.with_columns(value=pl.col("value") * 2)
 
     fresh_registry.register("add_constant", AddConstantStep)
@@ -132,14 +136,16 @@ def test_step_registry_build_pipeline_runs_steps(fresh_registry, tiny_event_fram
     assert df["value"].to_list() == [2, 4]
 
 
-def test_step_registry_build_pipeline_missing_step(fresh_registry):
+def test_step_registry_build_pipeline_missing_step(fresh_registry: StepRegistry) -> None:
     with pytest.raises(KeyError):
         fresh_registry.build_pipeline(["missing"])
 
 
-def test_recipe_uses_registry_when_steps_configured(fresh_registry, tiny_event_frame):
+def test_recipe_uses_registry_when_steps_configured(
+    fresh_registry: StepRegistry, tiny_event_frame: EventFrame
+) -> None:
     class DoubleValueStep(Step):
-        def run(self, event_frame):
+        def run(self, event_frame: EventFrame) -> EventFrame:
             return event_frame.with_columns(value=pl.col("value") * 2)
 
     fresh_registry.register("double", DoubleValueStep)
@@ -151,7 +157,7 @@ def test_recipe_uses_registry_when_steps_configured(fresh_registry, tiny_event_f
     )
 
     class RegistryRecipe(BaseRecipe):
-        def build_pipeline(self):
+        def build_pipeline(self) -> Pipeline:
             raise AssertionError("Should use registry-defined steps")
 
     recipe = RegistryRecipe(config, step_registry=fresh_registry)
@@ -160,7 +166,7 @@ def test_recipe_uses_registry_when_steps_configured(fresh_registry, tiny_event_f
     assert df["value"].to_list() == [2, 4]
 
 
-def test_recipe_requires_registry_when_steps_configured(tiny_event_frame):
+def test_recipe_requires_registry_when_steps_configured(tiny_event_frame: EventFrame) -> None:
     config = RecipeConfig(
         dataset="demo",
         recipe="configured",
@@ -168,7 +174,7 @@ def test_recipe_requires_registry_when_steps_configured(tiny_event_frame):
     )
 
     class NoRegistryRecipe(BaseRecipe):
-        def build_pipeline(self):
+        def build_pipeline(self) -> Pipeline:
             raise AssertionError("Should not build default pipeline")
 
     recipe = NoRegistryRecipe(config)

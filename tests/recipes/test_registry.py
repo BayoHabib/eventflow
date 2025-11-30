@@ -15,7 +15,7 @@ class DummyRecipe(BaseRecipe):
         return Pipeline([])
 
 
-def test_register_and_get_recipe():
+def test_register_and_get_recipe() -> None:
     """Test registering and retrieving a recipe."""
     register_recipe("test_dataset", "test_recipe", DummyRecipe)
 
@@ -25,13 +25,13 @@ def test_register_and_get_recipe():
     assert isinstance(recipe, DummyRecipe)
 
 
-def test_get_nonexistent_recipe():
+def test_get_nonexistent_recipe() -> None:
     """Test getting a recipe that doesn't exist."""
     with pytest.raises(ValueError):
         get_recipe("nonexistent", "recipe")
 
 
-def test_list_recipes():
+def test_list_recipes() -> None:
     """Test listing recipes."""
     register_recipe("test_dataset", "recipe1", DummyRecipe)
     register_recipe("test_dataset", "recipe2", DummyRecipe)
@@ -42,7 +42,7 @@ def test_list_recipes():
     assert "recipe2" in recipes["test_dataset"]
 
 
-def test_list_datasets():
+def test_list_datasets() -> None:
     """Test listing datasets."""
     register_recipe("dataset1", "recipe", DummyRecipe)
     register_recipe("dataset2", "recipe", DummyRecipe)

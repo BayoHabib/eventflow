@@ -71,6 +71,25 @@ class ContextSchema(BaseModel):
         return self.spatial_col is not None or self.geometry_col is not None
 
 
+class FeatureProvenance(BaseModel):
+    """Record describing how a feature was produced during a pipeline run."""
+
+    produced_by: str | None = None
+    inputs: list[str] = Field(default_factory=list)
+    tags: set[str] = Field(default_factory=set)
+    description: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextRequirementState(BaseModel):
+    """Aggregate requirements needed to interpret the EventFrame correctly."""
+
+    spatial_crs: str | None = None
+    temporal_resolution: str | None = None
+    required_context: set[str] = Field(default_factory=set)
+    notes: dict[str, Any] = Field(default_factory=dict)
+
+
 class EventMetadata(BaseModel):
     """
     Metadata about an event dataset.
@@ -96,6 +115,8 @@ class EventMetadata(BaseModel):
     custom: dict[str, Any] = Field(default_factory=dict)
     output_modalities: set[str] = Field(default_factory=lambda: {"table"})
     feature_catalog: dict[str, Any] = Field(default_factory=dict)
+    feature_provenance: dict[str, FeatureProvenance] = Field(default_factory=dict)
+    context_requirements: ContextRequirementState = Field(default_factory=ContextRequirementState)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

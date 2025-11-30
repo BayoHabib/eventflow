@@ -5,7 +5,7 @@ import pytest
 from eventflow.core.schema import ContextSchema, EventMetadata, EventSchema
 
 
-def test_event_schema_with_latlon():
+def test_event_schema_with_latlon() -> None:
     """Test EventSchema with lat/lon columns."""
     schema = EventSchema(
         timestamp_col="timestamp",
@@ -20,7 +20,7 @@ def test_event_schema_with_latlon():
     assert schema.lon_col == "longitude"
 
 
-def test_event_schema_with_geometry():
+def test_event_schema_with_geometry() -> None:
     """Test EventSchema with geometry column."""
     schema = EventSchema(
         timestamp_col="timestamp",
@@ -32,7 +32,7 @@ def test_event_schema_with_geometry():
     assert schema.geometry_col == "geometry"
 
 
-def test_event_schema_requires_spatial():
+def test_event_schema_requires_spatial() -> None:
     """Test that EventSchema requires spatial information."""
     with pytest.raises(ValueError):
         EventSchema(
@@ -41,7 +41,7 @@ def test_event_schema_requires_spatial():
         )
 
 
-def test_context_schema_temporal():
+def test_context_schema_temporal() -> None:
     """Test ContextSchema with temporal dimension."""
     schema = ContextSchema(
         timestamp_col="timestamp",
@@ -52,7 +52,7 @@ def test_context_schema_temporal():
     assert not schema.has_spatial()
 
 
-def test_context_schema_spatial():
+def test_context_schema_spatial() -> None:
     """Test ContextSchema with spatial dimension."""
     schema = ContextSchema(
         spatial_col="zone_id",
@@ -63,7 +63,7 @@ def test_context_schema_spatial():
     assert not schema.has_temporal()
 
 
-def test_event_metadata():
+def test_event_metadata() -> None:
     """Test EventMetadata."""
     metadata = EventMetadata(
         dataset_name="test_dataset",

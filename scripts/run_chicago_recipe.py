@@ -11,7 +11,7 @@ This script demonstrates how to:
 import sys
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # Add src to path for development
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from eventflow.core.schema import DatasetConfig, RecipeConfig
 
 
-def main():
+def main() -> None:
     """Main execution function."""
     # Configuration paths
     dataset_config_path = Path("configs/datasets/chicago_crime_example.yaml")

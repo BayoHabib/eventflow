@@ -13,7 +13,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 # Add src to path for development
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -22,7 +22,7 @@ from eventflow.core.schema import DatasetConfig, RecipeConfig
 from eventflow.tracking.mlflow_tracker import MLflowTracker
 
 
-def main():
+def main() -> None:
     """Main execution function."""
     print("=" * 60)
     print("Eventflow Experiment Runner with MLflow Tracking")
@@ -31,7 +31,7 @@ def main():
     # Initialize MLflow tracker
     print("\n1. Initializing experiment tracker...")
     try:
-        tracker = MLflowTracker()
+        tracker: MLflowTracker | None = MLflowTracker()
         print("   MLflow tracker initialized")
     except ImportError:
         print("   MLflow not available - install with: pip install mlflow")
