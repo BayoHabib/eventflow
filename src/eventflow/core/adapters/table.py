@@ -253,10 +253,12 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
                 import torch
 
                 X, y = output.get_X_y()
-                data: dict[str, Any] = {"X": torch.from_numpy(X)}
+                data: dict[str, Any] = {
+                    "X": torch.from_numpy(X),
+                    "feature_names": output.feature_names,
+                }
                 if y is not None:
                     data["y"] = torch.from_numpy(y)
-                data["feature_names"] = output.feature_names
                 torch.save(data, path)
             except ImportError as e:
                 raise ImportError("PyTorch required for pytorch format") from e

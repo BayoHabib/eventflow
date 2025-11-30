@@ -108,7 +108,7 @@ class GraphOutput:
     def to_dgl(self) -> Any:
         """Convert to DGL graph format."""
         try:
-            import dgl  # type: ignore[import-not-found]
+            import dgl  # type: ignore[import-untyped,import-not-found]
             import torch
 
             src = self.edge_index[0]
