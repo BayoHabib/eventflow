@@ -3,6 +3,7 @@
 from eventflow.recipes.base import BaseRecipe
 from eventflow.core.pipeline import Pipeline, Step
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.registry import StepRegistry
 from eventflow.core.schema import RecipeConfig
 from eventflow.core import spatial, temporal, features
 
@@ -18,14 +19,19 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
     - Count aggregations per grid cell and time bin
     """
 
-    def __init__(self, config: RecipeConfig) -> None:
+    def __init__(
+        self,
+        config: RecipeConfig,
+        *,
+        step_registry: StepRegistry | None = None,
+    ) -> None:
         """
         Initialize recipe.
         
         Args:
             config: Recipe configuration
         """
-        self.config = config
+        super().__init__(config, step_registry=step_registry)
         self.name = "chicago_crime_v1"
 
     def build_pipeline(self) -> Pipeline:

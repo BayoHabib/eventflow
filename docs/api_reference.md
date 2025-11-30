@@ -60,6 +60,37 @@ class EventFrame:
         ...
 ```
 
+### eventflow.core.registry
+
+#### StepRegistry
+
+Lightweight registry for discovering and instantiating reusable pipeline steps.
+
+```python
+from eventflow.core.registry import StepRegistry
+
+registry = StepRegistry()
+
+class AggregateStep(Step):
+    def __init__(self, group_by: list[str]):
+        self.group_by = group_by
+
+    def run(self, event_frame: EventFrame) -> EventFrame:
+        return eventflow.core.features.aggregate_counts(event_frame, self.group_by)
+
+registry.register("aggregate", AggregateStep, tags={"feature"})
+
+# Instantiate directly
+step = registry.create("aggregate", params={"group_by": ["grid_id"]})
+
+# Or build a pipeline from config-style definitions
+pipeline = registry.build_pipeline([
+    {"name": "aggregate", "params": {"group_by": ["grid_id", "time_bin"]}},
+])
+```
+
+Each registry entry is represented by a `StepSpec` that tracks tags, documentation, and optional configuration schema metadata.
+
 ### eventflow.core.spatial
 
 Functions for spatial operations:
@@ -109,13 +140,24 @@ def load_chicago_crime(
 
 ```python
 class BaseRecipe(ABC):
+    def __init__(
+        self,
+        config: RecipeConfig,
+        *,
+        step_registry: StepRegistry | None = None,
+    ) -> None: ...
+
     @abstractmethod
     def build_pipeline(self) -> Pipeline:
-        """Build the transformation pipeline."""
+        """Build the transformation pipeline used when no registry config is supplied."""
         ...
-    
+
+    def get_pipeline(self) -> Pipeline:
+        """Return a pipeline, favoring `config.features["steps"]` when provided."""
+        ...
+
     def run(self, event_frame: EventFrame) -> EventFrame:
-        """Run the recipe on event data."""
+        """Resolve the pipeline and execute it against an EventFrame."""
         ...
 ```
 
