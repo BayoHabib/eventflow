@@ -77,3 +77,15 @@ def test_event_frame_with_columns(sample_event_frame):
     )
     df = new_ef.collect()
     assert "new_col" in df.columns
+
+
+def test_event_frame_register_feature_updates_metadata(sample_event_frame):
+    """Registering a feature should update metadata catalog without mutating original."""
+    info = {"description": "lagged count", "source_step": "LagStep"}
+
+    updated = sample_event_frame.register_feature("lag_count_1h", info, modality="table")
+
+    assert "lag_count_1h" not in sample_event_frame.metadata.feature_catalog
+
+    assert updated.metadata.feature_catalog["lag_count_1h"] == info
+    assert "table" in updated.metadata.output_modalities

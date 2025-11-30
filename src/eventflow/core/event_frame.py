@@ -68,6 +68,41 @@ class EventFrame:
         new_metadata = self.metadata.model_copy(update=updates)
         return EventFrame(self.lazy_frame, self.schema, new_metadata)
 
+    def register_feature(
+        self,
+        name: str,
+        info: dict[str, Any],
+        modality: str | None = None,
+    ) -> "EventFrame":
+        """Return a new EventFrame with feature catalog updated.
+
+        Args:
+            name: Feature identifier to register.
+            info: Arbitrary metadata describing the feature.
+            modality: Optional modality hint to add to metadata.
+
+        Returns:
+            EventFrame whose metadata includes the registered feature.
+        """
+        catalog = dict(self.metadata.feature_catalog)
+        catalog[name] = info
+
+        modalities = set(self.metadata.output_modalities)
+        if modality:
+            modalities.add(modality)
+
+        logger.debug(
+            "Registering feature '%s' (modality=%s) on dataset '%s'",
+            name,
+            modality or "<unchanged>",
+            self.metadata.dataset_name,
+        )
+
+        return self.with_metadata(
+            feature_catalog=catalog,
+            output_modalities=modalities,
+        )
+
     def collect(self) -> pl.DataFrame:
         """
         Materialize the lazy frame into a DataFrame.
