@@ -137,7 +137,7 @@ def assign_to_grid(
 
     min_x = min(grid_data["minx"])
     min_y = min(grid_data["miny"])
-    unique_minx = {value for value in grid_data["minx"]}
+    unique_minx = set(grid_data["minx"])
     n_cols = max(len(unique_minx), 1)
 
     lf = lf.with_columns([

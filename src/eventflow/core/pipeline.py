@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
-from typing import Any
 
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.utils import get_logger
