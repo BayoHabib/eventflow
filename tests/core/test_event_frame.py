@@ -4,11 +4,11 @@ import polars as pl
 import pytest
 
 from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
+from eventflow.core.schema import EventMetadata, EventSchema, FeatureProvenance
 
 
 @pytest.fixture
-def sample_event_frame():
+def sample_event_frame() -> EventFrame:
     """Create a sample EventFrame for testing."""
     data = {
         "timestamp": ["2024-01-01 00:00:00", "2024-01-01 01:00:00"],
@@ -37,46 +37,46 @@ def sample_event_frame():
     return EventFrame(lf, schema, metadata)
 
 
-def test_event_frame_creation(sample_event_frame):
+def test_event_frame_creation(sample_event_frame: EventFrame) -> None:
     """Test EventFrame creation."""
     assert sample_event_frame.schema.timestamp_col == "timestamp"
     assert sample_event_frame.metadata.dataset_name == "test"
 
 
-def test_event_frame_collect(sample_event_frame):
+def test_event_frame_collect(sample_event_frame: EventFrame) -> None:
     """Test collecting EventFrame to DataFrame."""
     df = sample_event_frame.collect()
     assert len(df) == 2
     assert "timestamp" in df.columns
 
 
-def test_event_frame_count(sample_event_frame):
+def test_event_frame_count(sample_event_frame: EventFrame) -> None:
     """Test counting events."""
     count = sample_event_frame.count()
     assert count == 2
 
 
-def test_event_frame_filter(sample_event_frame):
+def test_event_frame_filter(sample_event_frame: EventFrame) -> None:
     """Test filtering EventFrame."""
     filtered = sample_event_frame.filter(pl.col("type") == "A")
     assert filtered.count() == 1
 
 
-def test_event_frame_select(sample_event_frame):
+def test_event_frame_select(sample_event_frame: EventFrame) -> None:
     """Test selecting columns."""
     selected = sample_event_frame.select("timestamp", "type")
     df = selected.collect()
     assert len(df.columns) == 2
 
 
-def test_event_frame_with_columns(sample_event_frame):
+def test_event_frame_with_columns(sample_event_frame: EventFrame) -> None:
     """Test adding columns."""
     new_ef = sample_event_frame.with_columns(new_col=pl.lit("test"))
     df = new_ef.collect()
     assert "new_col" in df.columns
 
 
-def test_event_frame_register_feature_updates_metadata(sample_event_frame):
+def test_event_frame_register_feature_updates_metadata(sample_event_frame: EventFrame) -> None:
     """Registering a feature should update metadata catalog without mutating original."""
     info = {"description": "lagged count", "source_step": "LagStep"}
 
@@ -86,3 +86,27 @@ def test_event_frame_register_feature_updates_metadata(sample_event_frame):
 
     assert updated.metadata.feature_catalog["lag_count_1h"] == info
     assert "table" in updated.metadata.output_modalities
+    provenance = updated.metadata.feature_provenance["lag_count_1h"]
+    assert isinstance(provenance, FeatureProvenance)
+    assert provenance.produced_by == "LagStep"
+    assert provenance.description == "lagged count"
+
+
+def test_event_frame_require_context(sample_event_frame: EventFrame) -> None:
+    """require_context should accumulate context requirements immutably."""
+
+    updated = sample_event_frame.require_context(
+        spatial_crs="EPSG:26971",
+        temporal_resolution="1h",
+        context_tags={"weather", "demographics"},
+        notes={"reason": "grid aggregation"},
+    )
+
+    original = sample_event_frame.metadata.context_requirements
+    assert original.spatial_crs is None
+
+    requirements = updated.metadata.context_requirements
+    assert requirements.spatial_crs == "EPSG:26971"
+    assert requirements.temporal_resolution == "1h"
+    assert requirements.required_context == {"weather", "demographics"}
+    assert requirements.notes["reason"] == "grid aggregation"

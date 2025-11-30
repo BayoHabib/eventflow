@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 
-from eventflow.core.schema import EventMetadata, EventSchema
+from eventflow.core.schema import EventMetadata, EventSchema, FeatureProvenance
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
@@ -70,11 +70,20 @@ class EventFrame:
         new_metadata = self.metadata.model_copy(update=updates)
         return EventFrame(self.lazy_frame, self.schema, new_metadata)
 
+    def add_output_modality(self, modality: str) -> "EventFrame":
+        """Return a new EventFrame with the given output modality registered."""
+        modalities = set(self.metadata.output_modalities)
+        if modality not in modalities:
+            modalities.add(modality)
+        return self.with_metadata(output_modalities=modalities)
+
     def register_feature(
         self,
         name: str,
         info: dict[str, Any],
         modality: str | None = None,
+        *,
+        provenance: FeatureProvenance | None = None,
     ) -> "EventFrame":
         """Return a new EventFrame with feature catalog updated.
 
@@ -82,12 +91,28 @@ class EventFrame:
             name: Feature identifier to register.
             info: Arbitrary metadata describing the feature.
             modality: Optional modality hint to add to metadata.
+            provenance: Optional provenance record; inferred from *info* when omitted.
 
         Returns:
             EventFrame whose metadata includes the registered feature.
         """
         catalog = dict(self.metadata.feature_catalog)
         catalog[name] = info
+
+        provenance_map = dict(self.metadata.feature_provenance)
+        if provenance is None:
+            provenance = FeatureProvenance(
+                produced_by=info.get("source_step"),
+                inputs=list(info.get("inputs", [])),
+                tags=set(info.get("tags", [])),
+                description=info.get("description"),
+                metadata={
+                    k: v
+                    for k, v in info.items()
+                    if k not in {"source_step", "inputs", "tags", "description"}
+                },
+            )
+        provenance_map[name] = provenance
 
         modalities = set(self.metadata.output_modalities)
         if modality:
@@ -102,8 +127,32 @@ class EventFrame:
 
         return self.with_metadata(
             feature_catalog=catalog,
+            feature_provenance=provenance_map,
             output_modalities=modalities,
         )
+
+    def require_context(
+        self,
+        *,
+        spatial_crs: str | None = None,
+        temporal_resolution: str | None = None,
+        context_tags: set[str] | None = None,
+        notes: dict[str, Any] | None = None,
+    ) -> "EventFrame":
+        """Return a new EventFrame with updated context requirements."""
+
+        requirements = self.metadata.context_requirements.model_copy(deep=True)
+
+        if spatial_crs:
+            requirements.spatial_crs = spatial_crs
+        if temporal_resolution:
+            requirements.temporal_resolution = temporal_resolution
+        if context_tags:
+            requirements.required_context.update(context_tags)
+        if notes:
+            requirements.notes.update(notes)
+
+        return self.with_metadata(context_requirements=requirements)
 
     def collect(self) -> pl.DataFrame:
         """

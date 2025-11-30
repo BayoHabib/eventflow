@@ -1,11 +1,13 @@
 """Common test fixtures and utilities."""
 
+from pathlib import Path
+
 import polars as pl
 import pytest
 
 
 @pytest.fixture
-def sample_data_dir(tmp_path):
+def sample_data_dir(tmp_path: Path) -> Path:
     """Create a temporary directory with sample data."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -13,7 +15,7 @@ def sample_data_dir(tmp_path):
 
 
 @pytest.fixture
-def sample_events():
+def sample_events() -> pl.DataFrame:
     """Create sample event data."""
     data = {
         "timestamp": [
