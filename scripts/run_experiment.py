@@ -56,10 +56,12 @@ def main():
         tracker.start_run(run_name=run_name)
 
         # Log parameters
-        tracker.set_tags({
-            "dataset": dataset_config.dataset_name,
-            "recipe": recipe_config.recipe,
-        })
+        tracker.set_tags(
+            {
+                "dataset": dataset_config.dataset_name,
+                "recipe": recipe_config.recipe,
+            }
+        )
         tracker.log_param("grid_size_m", recipe_config.grid.get("size_m", 300))
         tracker.log_param("time_bin", recipe_config.temporal.get("time_bin", "6h"))
         tracker.log_param("crs", dataset_config.crs)
@@ -101,10 +103,14 @@ def main():
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = Path(tmpdir) / "config.json"
             with open(config_path, "w") as f:
-                json.dump({
-                    "dataset": dataset_config.dict(),
-                    "recipe": recipe_config.dict(),
-                }, f, indent=2)
+                json.dump(
+                    {
+                        "dataset": dataset_config.dict(),
+                        "recipe": recipe_config.dict(),
+                    },
+                    f,
+                    indent=2,
+                )
             tracker.log_artifact(str(config_path))
 
     # End tracking

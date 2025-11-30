@@ -31,13 +31,15 @@ class ChicagoNOAAWeatherSource(DynamicTemporalSource):
         lf = pl.scan_parquet(self.data_path)
 
         # Standardize column names
-        lf = lf.select([
-            pl.col("timestamp"),
-            pl.col("temperature_f").alias("temperature"),
-            pl.col("precipitation_in").alias("precipitation"),
-            pl.col("wind_speed_mph").alias("wind_speed"),
-            pl.col("conditions").alias("weather_condition"),
-        ])
+        lf = lf.select(
+            [
+                pl.col("timestamp"),
+                pl.col("temperature_f").alias("temperature"),
+                pl.col("precipitation_in").alias("precipitation"),
+                pl.col("wind_speed_mph").alias("wind_speed"),
+                pl.col("conditions").alias("weather_condition"),
+            ]
+        )
 
         return lf
 

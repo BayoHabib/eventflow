@@ -17,11 +17,10 @@ class MLflowTracker:
         """Initialize MLflow tracker."""
         try:
             import mlflow
+
             self.mlflow = mlflow
         except ImportError as err:
-            raise ImportError(
-                "MLflow is not installed. Install with: pip install mlflow"
-            ) from err
+            raise ImportError("MLflow is not installed. Install with: pip install mlflow") from err
 
     def log_param(self, key: str, value: Any) -> None:
         """Log a parameter to MLflow."""

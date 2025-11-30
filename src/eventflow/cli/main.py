@@ -65,16 +65,16 @@ def list_datasets() -> None:
 
 
 @app.command()
-def list_recipes(
-    dataset: str | None = typer.Option(None, help="Filter by dataset")
-) -> None:
+def list_recipes(dataset: str | None = typer.Option(None, help="Filter by dataset")) -> None:
     """List all available recipes."""
     from eventflow.recipes.registry import list_recipes as get_recipes
 
     recipes = get_recipes(dataset)
 
     if not recipes:
-        typer.echo(f"No recipes found for dataset: {dataset}" if dataset else "No recipes registered")
+        typer.echo(
+            f"No recipes found for dataset: {dataset}" if dataset else "No recipes registered"
+        )
         return
 
     typer.echo("Available recipes:")
@@ -119,6 +119,7 @@ def validate(
 def version() -> None:
     """Show eventflow version."""
     from eventflow import __version__
+
     typer.echo(f"eventflow version {__version__}")
 
 

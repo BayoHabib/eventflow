@@ -20,9 +20,7 @@ def get_logger(name: str) -> logging.Logger:
 
     if not logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
@@ -72,22 +70,32 @@ def get_timezone(location: str) -> str:
 def is_numeric_col(dtype: Any) -> bool:
     """Check if a Polars dtype is numeric."""
     import polars as pl
+
     return dtype in [
-        pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-        pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-        pl.Float32, pl.Float64,
+        pl.Int8,
+        pl.Int16,
+        pl.Int32,
+        pl.Int64,
+        pl.UInt8,
+        pl.UInt16,
+        pl.UInt32,
+        pl.UInt64,
+        pl.Float32,
+        pl.Float64,
     ]
 
 
 def is_categorical_col(dtype: Any) -> bool:
     """Check if a Polars dtype is categorical."""
     import polars as pl
+
     return dtype in [pl.Utf8, pl.Categorical, pl.Boolean]
 
 
 def is_temporal_col(dtype: Any) -> bool:
     """Check if a Polars dtype is temporal."""
     import polars as pl
+
     return dtype in [pl.Date, pl.Datetime, pl.Time, pl.Duration]
 
 
@@ -180,9 +188,7 @@ class ProgressTracker:
         self.current += n
         if self.current % max(1, self.total // 10) == 0:
             pct = (self.current / self.total) * 100
-            self.logger.info(
-                f"{self.description}: {self.current}/{self.total} ({pct:.1f}%)"
-            )
+            self.logger.info(f"{self.description}: {self.current}/{self.total} ({pct:.1f}%)")
 
     def finish(self) -> None:
         """Mark progress as complete."""

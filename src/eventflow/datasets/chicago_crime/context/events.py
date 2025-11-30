@@ -30,12 +30,14 @@ class ChicagoSpecialEventsSource(StaticTemporalSource):
         """Load special events data."""
         lf = pl.scan_parquet(self.data_path)
 
-        lf = lf.select([
-            pl.col("event_date").alias("timestamp"),
-            pl.col("event_name"),
-            pl.col("event_type"),
-            pl.col("expected_attendance"),
-        ])
+        lf = lf.select(
+            [
+                pl.col("event_date").alias("timestamp"),
+                pl.col("event_name"),
+                pl.col("event_type"),
+                pl.col("expected_attendance"),
+            ]
+        )
 
         return lf
 

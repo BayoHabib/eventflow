@@ -37,9 +37,7 @@ class EventSchema(BaseModel):
         has_geometry = self.geometry_col is not None
 
         if not has_latlon and not has_geometry:
-            raise ValueError(
-                "Either (lat_col and lon_col) or geometry_col must be provided"
-            )
+            raise ValueError("Either (lat_col and lon_col) or geometry_col must be provided")
 
 
 class ContextSchema(BaseModel):
@@ -64,9 +62,8 @@ class ContextSchema(BaseModel):
 
     def has_temporal(self) -> bool:
         """Check if schema has temporal dimension."""
-        return (
-            self.timestamp_col is not None
-            or (self.interval_start_col is not None and self.interval_end_col is not None)
+        return self.timestamp_col is not None or (
+            self.interval_start_col is not None and self.interval_end_col is not None
         )
 
     def has_spatial(self) -> bool:

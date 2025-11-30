@@ -1,6 +1,5 @@
 """Recipe registry for discovery and instantiation."""
 
-
 from eventflow.core.schema import RecipeConfig
 from eventflow.core.utils import get_logger
 from eventflow.recipes.base import BaseRecipe
@@ -87,10 +86,7 @@ def list_recipes(dataset_name: str | None = None) -> dict[str, list[str]]:
             return {}
         return {dataset_name: list(_RECIPE_REGISTRY[dataset_name].keys())}
 
-    return {
-        dataset: list(recipes.keys())
-        for dataset, recipes in _RECIPE_REGISTRY.items()
-    }
+    return {dataset: list(recipes.keys()) for dataset, recipes in _RECIPE_REGISTRY.items()}
 
 
 def list_datasets() -> list[str]:

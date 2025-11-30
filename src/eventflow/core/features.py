@@ -27,9 +27,7 @@ def aggregate_counts(
         EventFrame with aggregated counts
     """
     logger.info(f"Aggregating counts by: {group_by}")
-    lf = event_frame.lazy_frame.group_by(group_by).agg([
-        pl.len().alias(count_col)
-    ])
+    lf = event_frame.lazy_frame.group_by(group_by).agg([pl.len().alias(count_col)])
     logger.debug(f"Created count column: {count_col}")
 
     return event_frame.with_lazy_frame(lf)
@@ -205,8 +203,7 @@ def encode_categorical(
 
         # Create binary columns
         exprs = [
-            (pl.col(col) == val).cast(pl.Int32).alias(f"{prefix}_{val}")
-            for val in unique_vals
+            (pl.col(col) == val).cast(pl.Int32).alias(f"{prefix}_{val}") for val in unique_vals
         ]
         lf = lf.with_columns(exprs)
 
@@ -215,11 +212,13 @@ def encode_categorical(
         unique_vals = lf.select(pl.col(col).unique().sort()).collect()[col].to_list()
         mapping = {val: idx for idx, val in enumerate(unique_vals)}
 
-        lf = lf.with_columns([
-            pl.col(col)
-            .map_elements(lambda value: mapping.get(value), return_dtype=pl.Int64)
-            .alias(f"{col}_encoded")
-        ])
+        lf = lf.with_columns(
+            [
+                pl.col(col)
+                .map_elements(lambda value: mapping.get(value), return_dtype=pl.Int64)
+                .alias(f"{col}_encoded")
+            ]
+        )
 
     else:
         raise ValueError(f"Unknown encoding method: {method}")
@@ -248,10 +247,9 @@ def compute_ratios(
     if output_col is None:
         output_col = f"{numerator_col}_per_{denominator_col}"
 
-    lf = event_frame.lazy_frame.with_columns([
-        (pl.col(numerator_col) / pl.col(denominator_col).clip(1e-10))
-        .alias(output_col)
-    ])
+    lf = event_frame.lazy_frame.with_columns(
+        [(pl.col(numerator_col) / pl.col(denominator_col).clip(1e-10)).alias(output_col)]
+    )
 
     return event_frame.with_lazy_frame(lf)
 
@@ -278,14 +276,14 @@ def normalize_features(
 
     if method == "zscore":
         exprs = [
-            ((pl.col(col) - pl.col(col).mean()) / pl.col(col).std())
-            .alias(f"{col}_normalized")
+            ((pl.col(col) - pl.col(col).mean()) / pl.col(col).std()).alias(f"{col}_normalized")
             for col in cols
         ]
     elif method == "minmax":
         exprs = [
-            ((pl.col(col) - pl.col(col).min()) / (pl.col(col).max() - pl.col(col).min()))
-            .alias(f"{col}_normalized")
+            ((pl.col(col) - pl.col(col).min()) / (pl.col(col).max() - pl.col(col).min())).alias(
+                f"{col}_normalized"
+            )
             for col in cols
         ]
     else:

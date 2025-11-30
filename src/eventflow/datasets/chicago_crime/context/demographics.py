@@ -32,13 +32,15 @@ class ChicagoDemographicsSource(StaticSpatialSource):
         """Load demographics data."""
         lf = pl.scan_parquet(self.data_path)
 
-        lf = lf.select([
-            pl.col(self.spatial_level).alias("zone_id"),
-            pl.col("population"),
-            pl.col("median_income"),
-            pl.col("pct_below_poverty"),
-            pl.col("pct_college_educated"),
-        ])
+        lf = lf.select(
+            [
+                pl.col(self.spatial_level).alias("zone_id"),
+                pl.col("population"),
+                pl.col("median_income"),
+                pl.col("pct_below_poverty"),
+                pl.col("pct_college_educated"),
+            ]
+        )
 
         return lf
 

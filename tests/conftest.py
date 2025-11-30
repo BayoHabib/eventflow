@@ -1,6 +1,5 @@
 """Common test fixtures and utilities."""
 
-
 import polars as pl
 import pytest
 
@@ -28,6 +27,4 @@ def sample_events():
         "value": [1, 2, 3],
     }
 
-    return pl.DataFrame(data).with_columns([
-        pl.col("timestamp").str.to_datetime()
-    ])
+    return pl.DataFrame(data).with_columns([pl.col("timestamp").str.to_datetime()])

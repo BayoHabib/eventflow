@@ -110,9 +110,7 @@ def test_step_registry_build_pipeline_runs_steps(fresh_registry, tiny_event_fram
             self.value = value
 
         def run(self, event_frame):
-            return event_frame.with_columns(
-                **{self.column: pl.lit(self.value)}
-            )
+            return event_frame.with_columns(**{self.column: pl.lit(self.value)})
 
     class DoubleValueStep(Step):
         def run(self, event_frame):

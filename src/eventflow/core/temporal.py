@@ -55,9 +55,7 @@ def extract_temporal_components(
         exprs.append(pl.col(timestamp_col).dt.year().alias("year"))
 
     if "is_weekend" in components:
-        exprs.append(
-            (pl.col(timestamp_col).dt.weekday().is_in([5, 6])).alias("is_weekend")
-        )
+        exprs.append((pl.col(timestamp_col).dt.weekday().is_in([5, 6])).alias("is_weekend"))
 
     if exprs:
         lf = lf.with_columns(exprs)
@@ -84,9 +82,9 @@ def create_time_bins(
     timestamp_col = event_frame.schema.timestamp_col
 
     logger.info(f"Creating time bins with size: {bin_size}")
-    lf = event_frame.lazy_frame.with_columns([
-        pl.col(timestamp_col).dt.truncate(bin_size).alias(bin_col)
-    ])
+    lf = event_frame.lazy_frame.with_columns(
+        [pl.col(timestamp_col).dt.truncate(bin_size).alias(bin_col)]
+    )
 
     return event_frame.with_lazy_frame(lf).with_metadata(time_bin=bin_size)
 
@@ -183,11 +181,13 @@ def compute_time_deltas(
         left_on=event_timestamp_col,
         right_on=reference_timestamp_col,
         strategy="nearest",
-    ).with_columns([
-        (pl.col(event_timestamp_col) - pl.col(reference_timestamp_col))
-        .dt.total_seconds()
-        .alias(delta_col)
-    ])
+    ).with_columns(
+        [
+            (pl.col(event_timestamp_col) - pl.col(reference_timestamp_col))
+            .dt.total_seconds()
+            .alias(delta_col)
+        ]
+    )
 
     return event_frame.with_lazy_frame(lf)
 
@@ -210,8 +210,6 @@ def create_temporal_windows(
     lf = event_frame.lazy_frame
 
     for window in window_sizes:
-        lf = lf.with_columns([
-            pl.col(timestamp_col).dt.truncate(window).alias(f"window_{window}")
-        ])
+        lf = lf.with_columns([pl.col(timestamp_col).dt.truncate(window).alias(f"window_{window}")])
 
     return event_frame.with_lazy_frame(lf)

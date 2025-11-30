@@ -1,4 +1,5 @@
 """Registry helpers for reusable pipeline steps."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -48,9 +49,7 @@ class StepRegistry:
             raise ValueError(f"Step already registered: {name}")
 
         tag_set = frozenset(tags or ())
-        schema_map = (
-            MappingProxyType(dict(config_schema)) if config_schema is not None else None
-        )
+        schema_map = MappingProxyType(dict(config_schema)) if config_schema is not None else None
 
         spec = StepSpec(
             name=name,
