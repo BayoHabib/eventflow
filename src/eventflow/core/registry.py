@@ -1,17 +1,18 @@
 """Registry helpers for reusable pipeline steps."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, cast
+
+from .pipeline import Step
+from .utils import get_logger
 
 if TYPE_CHECKING:  # pragma: no cover - import for type checking only
     from .pipeline import Pipeline
 
 StepDefinition = str | tuple[str, Mapping[str, Any] | None] | Mapping[str, Any]
-
-from .pipeline import Step
-from .utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -86,7 +87,7 @@ class StepRegistry:
         logger.debug("Instantiated step %s with params=%s", name, sorted(kwargs.keys()))
         return instance
 
-    def build_pipeline(self, steps: Iterable[StepDefinition]) -> "Pipeline":
+    def build_pipeline(self, steps: Iterable[StepDefinition]) -> Pipeline:
         """Construct a Pipeline from an iterable of step definitions."""
         from .pipeline import Pipeline  # Local import to avoid circular reference
 
@@ -98,10 +99,14 @@ class StepRegistry:
             elif isinstance(entry, tuple) and len(entry) == 2:
                 name, params = entry
             elif isinstance(entry, Mapping):
-                if "name" not in entry:
-                    raise ValueError("Step mapping must include a 'name' key")
-                name = entry["name"]  # type: ignore[index]
-                params = entry.get("params") or entry.get("config")
+                raw_name = entry.get("name")
+                if not isinstance(raw_name, str):
+                    raise ValueError("Step mapping must include a string 'name' key")
+                name = raw_name
+                raw_params = entry.get("params")
+                if raw_params is None:
+                    raw_params = entry.get("config")
+                params = cast(Mapping[str, Any] | None, raw_params)
             else:
                 raise TypeError(
                     "Step definitions must be str, mapping with 'name', or (name, params) tuple"

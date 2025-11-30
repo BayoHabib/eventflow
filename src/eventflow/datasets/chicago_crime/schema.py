@@ -1,6 +1,9 @@
 """Schema definition for Chicago Crime dataset."""
 
-from eventflow.core.schema import EventSchema, EventMetadata
+from collections.abc import Iterable, Mapping
+from typing import Any
+
+from eventflow.core.schema import EventMetadata, EventSchema
 
 # Chicago Crime Event Schema
 # Maps to Socrata "Crimes - 2001 to Present" dataset
@@ -25,22 +28,35 @@ CHICAGO_CRIME_SCHEMA = EventSchema(
         "y_coordinate",
     ],
 )
+def create_chicago_metadata(
+    *,
+    dataset_name: str = "chicago_crime",
+    crs: str = "EPSG:4326",
+    time_zone: str = "America/Chicago",
+    time_bin: str | None = None,
+    grid_size_m: float | None = None,
+    bounds: tuple[float, float, float, float] | None = None,
+    date_range: tuple[str, str] | None = None,
+    custom: Mapping[str, Any] | None = None,
+    feature_catalog: Mapping[str, Any] | None = None,
+    output_modalities: Iterable[str] | None = None,
+) -> EventMetadata:
+    """Create typed metadata tailored for the Chicago Crime dataset."""
+    metadata = EventMetadata(
+        dataset_name=dataset_name,
+        crs=crs,
+        time_zone=time_zone,
+        time_bin=time_bin,
+        grid_size_m=grid_size_m,
+        bounds=bounds,
+        date_range=date_range,
+        custom=dict(custom or {}),
+        feature_catalog=dict(feature_catalog or {}),
+    )
 
+    if output_modalities is not None:
+        metadata = metadata.model_copy(
+            update={"output_modalities": set(output_modalities)}
+        )
 
-def create_chicago_metadata(**kwargs) -> EventMetadata:
-    """
-    Create metadata for Chicago Crime dataset.
-    
-    Args:
-        **kwargs: Additional metadata fields
-        
-    Returns:
-        EventMetadata instance
-    """
-    defaults = {
-        "dataset_name": "chicago_crime",
-        "crs": "EPSG:4326",  # Raw data is in WGS84
-        "time_zone": "America/Chicago",
-    }
-    defaults.update(kwargs)
-    return EventMetadata(**defaults)
+    return metadata
