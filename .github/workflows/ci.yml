@@ -43,7 +43,8 @@ jobs:
 
     - name: Install type stubs and optional dependencies
       run: |
-        pip install pandas-stubs torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pandas-stubs
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
         pip install dgl -f https://data.dgl.ai/wheels/repo.html || echo "DGL not available for this platform, skipping"
 
     - name: Lint with ruff
