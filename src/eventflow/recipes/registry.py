@@ -1,8 +1,15 @@
 """Recipe registry for discovery and instantiation."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from eventflow.core.schema import RecipeConfig
 from eventflow.core.utils import get_logger
 from eventflow.recipes.base import BaseRecipe
+
+if TYPE_CHECKING:
+    from eventflow.core.registry import FeatureStepRegistry
 
 logger = get_logger(__name__)
 
@@ -34,6 +41,8 @@ def get_recipe(
     dataset_name: str,
     recipe_name: str,
     config: RecipeConfig | None = None,
+    *,
+    step_registry: FeatureStepRegistry | None = None,
 ) -> BaseRecipe:
     """
     Get a recipe instance.
@@ -42,6 +51,7 @@ def get_recipe(
         dataset_name: Name of the dataset
         recipe_name: Name of the recipe
         config: Optional recipe configuration
+        step_registry: Optional step registry for resolving step names
 
     Returns:
         Recipe instance
@@ -68,7 +78,7 @@ def get_recipe(
         config = RecipeConfig(dataset=dataset_name, recipe=recipe_name)
 
     logger.info(f"Creating recipe instance: {recipe_name} for dataset {dataset_name}")
-    return recipe_class(config)
+    return recipe_class(config, step_registry=step_registry)
 
 
 def list_recipes(dataset_name: str | None = None) -> dict[str, list[str]]:

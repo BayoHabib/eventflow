@@ -120,9 +120,9 @@ class EventFrame:
         """Internal helper to create new EventFrame instances preserving invariants."""
 
         return EventFrame(
-            lazy_frame or self.lazy_frame,
-            schema or self.schema,
-            metadata or self.metadata,
+            self.lazy_frame if lazy_frame is None else lazy_frame,
+            self.schema if schema is None else schema,
+            self.metadata if metadata is None else metadata,
         )
 
     def add_output_modality(self, modality: str) -> "EventFrame":
