@@ -9,15 +9,15 @@ from typing import Any
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger with standardized configuration.
-    
+
     Args:
         name: Logger name (typically __name__)
-        
+
     Returns:
         Configured logger
     """
     logger = logging.getLogger(name)
-    
+
     if not logger.handlers:
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
@@ -26,14 +26,14 @@ def get_logger(name: str) -> logging.Logger:
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
-    
+
     return logger
 
 
 # Common CRS definitions
 class CRS(str, Enum):
     """Common coordinate reference systems."""
-    
+
     WGS84 = "EPSG:4326"  # Standard lat/lon
     WEB_MERCATOR = "EPSG:3857"  # Web mapping
     NAD83_ILLINOIS_EAST = "EPSG:26971"  # Chicago area (meters)
@@ -55,10 +55,10 @@ COMMON_TIMEZONES = {
 def get_timezone(location: str) -> str:
     """
     Get timezone for a common location.
-    
+
     Args:
         location: Location name (e.g., "chicago")
-        
+
     Returns:
         Timezone string (e.g., "America/Chicago")
     """
@@ -97,36 +97,36 @@ def validate_bounds(
 ) -> tuple[float, float, float, float]:
     """
     Validate and normalize spatial bounds.
-    
+
     Args:
         bounds: (minx, miny, maxx, maxy)
-        
+
     Returns:
         Validated bounds
-        
+
     Raises:
         ValueError: If bounds are invalid
     """
     minx, miny, maxx, maxy = bounds
-    
+
     if minx >= maxx:
         raise ValueError(f"minx ({minx}) must be less than maxx ({maxx})")
     if miny >= maxy:
         raise ValueError(f"miny ({miny}) must be less than maxy ({maxy})")
-    
+
     return (minx, miny, maxx, maxy)
 
 
 def parse_time_window(window: str) -> dict[str, int]:
     """
     Parse time window string into components.
-    
+
     Args:
         window: Time window string (e.g., "7d", "1h", "30m")
-        
+
     Returns:
         Dictionary with time components
-        
+
     Examples:
         >>> parse_time_window("7d")
         {'days': 7}
@@ -134,16 +134,16 @@ def parse_time_window(window: str) -> dict[str, int]:
         {'hours': 1}
     """
     import re
-    
+
     pattern = r"(\d+)([a-z]+)"
     match = re.match(pattern, window.lower())
-    
+
     if not match:
         raise ValueError(f"Invalid time window format: {window}")
-    
+
     value = int(match.group(1))
     unit = match.group(2)
-    
+
     unit_map = {
         "s": "seconds",
         "m": "minutes",
@@ -151,10 +151,10 @@ def parse_time_window(window: str) -> dict[str, int]:
         "d": "days",
         "w": "weeks",
     }
-    
+
     if unit not in unit_map:
         raise ValueError(f"Unknown time unit: {unit}")
-    
+
     return {unit_map[unit]: value}
 
 
@@ -165,7 +165,7 @@ class ProgressTracker:
     def __init__(self, total: int, description: str = "") -> None:
         """
         Initialize progress tracker.
-        
+
         Args:
             total: Total number of items
             description: Description of the operation

@@ -116,6 +116,7 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 strict_equality = true
+exclude = "(?x)(^tests/|^scripts/)"
 
 [[tool.mypy.overrides]]
 module = [
@@ -125,6 +126,12 @@ module = [
     "mlflow.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

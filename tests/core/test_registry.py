@@ -1,12 +1,12 @@
 """Tests for pipeline step registry."""
 
-import pytest
 import polars as pl
+import pytest
 
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.pipeline import Step
 from eventflow.core.registry import StepRegistry
-from eventflow.core.schema import EventSchema, EventMetadata, RecipeConfig
+from eventflow.core.schema import EventMetadata, EventSchema, RecipeConfig
 from eventflow.recipes.base import BaseRecipe
 
 

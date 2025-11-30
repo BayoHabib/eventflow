@@ -1,13 +1,14 @@
 """Schema definitions for events and context sources."""
 
 from typing import Any
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EventSchema(BaseModel):
     """
     Describes the structure of event data.
-    
+
     Attributes:
         timestamp_col: Name of the timestamp column (required)
         lat_col: Name of latitude column (optional)
@@ -34,7 +35,7 @@ class EventSchema(BaseModel):
         """Validate that either lat/lon or geometry_col is provided."""
         has_latlon = self.lat_col is not None and self.lon_col is not None
         has_geometry = self.geometry_col is not None
-        
+
         if not has_latlon and not has_geometry:
             raise ValueError(
                 "Either (lat_col and lon_col) or geometry_col must be provided"
@@ -44,7 +45,7 @@ class EventSchema(BaseModel):
 class ContextSchema(BaseModel):
     """
     Describes the structure of context data sources.
-    
+
     Attributes:
         timestamp_col: Name of timestamp column (optional)
         interval_start_col: Start of time interval (optional)
@@ -76,7 +77,7 @@ class ContextSchema(BaseModel):
 class EventMetadata(BaseModel):
     """
     Metadata about an event dataset.
-    
+
     Attributes:
         dataset_name: Name of the dataset
         crs: Coordinate reference system (e.g., "EPSG:4326")
@@ -105,7 +106,7 @@ class EventMetadata(BaseModel):
 class DatasetConfig(BaseModel):
     """
     Configuration for loading a dataset.
-    
+
     Attributes:
         dataset_name: Name of the dataset
         raw_root: Root path to raw data files
@@ -126,7 +127,7 @@ class DatasetConfig(BaseModel):
 class RecipeConfig(BaseModel):
     """
     Configuration for a recipe.
-    
+
     Attributes:
         dataset: Dataset name
         recipe: Recipe name

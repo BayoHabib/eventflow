@@ -1,7 +1,8 @@
 """Tests for schema definitions."""
 
 import pytest
-from eventflow.core.schema import EventSchema, ContextSchema, EventMetadata
+
+from eventflow.core.schema import ContextSchema, EventMetadata, EventSchema
 
 
 def test_event_schema_with_latlon():
@@ -13,7 +14,7 @@ def test_event_schema_with_latlon():
         categorical_cols=["type"],
         numeric_cols=["value"],
     )
-    
+
     assert schema.timestamp_col == "timestamp"
     assert schema.lat_col == "latitude"
     assert schema.lon_col == "longitude"
@@ -26,7 +27,7 @@ def test_event_schema_with_geometry():
         geometry_col="geometry",
         categorical_cols=["type"],
     )
-    
+
     assert schema.timestamp_col == "timestamp"
     assert schema.geometry_col == "geometry"
 
@@ -46,7 +47,7 @@ def test_context_schema_temporal():
         timestamp_col="timestamp",
         attribute_cols=["temperature", "humidity"],
     )
-    
+
     assert schema.has_temporal()
     assert not schema.has_spatial()
 
@@ -57,7 +58,7 @@ def test_context_schema_spatial():
         spatial_col="zone_id",
         attribute_cols=["population"],
     )
-    
+
     assert schema.has_spatial()
     assert not schema.has_temporal()
 
@@ -69,7 +70,7 @@ def test_event_metadata():
         crs="EPSG:4326",
         time_zone="UTC",
     )
-    
+
     assert metadata.dataset_name == "test_dataset"
     assert metadata.crs == "EPSG:4326"
     assert metadata.time_zone == "UTC"
