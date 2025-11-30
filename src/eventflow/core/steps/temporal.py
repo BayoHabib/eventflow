@@ -139,7 +139,7 @@ class ExtractTemporalComponentsStep(Step):
     @classmethod
     def with_components(
         cls, components: Sequence[str]
-    ) -> "type[ExtractTemporalComponentsStep]":
+    ) -> type[ExtractTemporalComponentsStep]:
         """Builder API to configure components."""
 
         class ConfiguredStep(ExtractTemporalComponentsStep):
@@ -283,7 +283,7 @@ class TemporalLagStep(Step):
         self.group_cols = list(group_cols) if group_cols else []
 
     @classmethod
-    def with_lags(cls, lags: Sequence[int]) -> "type[TemporalLagStep]":
+    def with_lags(cls, lags: Sequence[int]) -> type[TemporalLagStep]:
         """Builder API to configure lag periods."""
 
         class ConfiguredStep(TemporalLagStep):
@@ -358,7 +358,7 @@ class MovingAverageStep(Step):
         self.center = center
 
     @classmethod
-    def with_windows(cls, windows: Sequence[int]) -> "type[MovingAverageStep]":
+    def with_windows(cls, windows: Sequence[int]) -> type[MovingAverageStep]:
         """Builder API to configure window sizes."""
 
         class ConfiguredStep(MovingAverageStep):
