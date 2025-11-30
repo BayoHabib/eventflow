@@ -96,6 +96,8 @@ class EventMetadata(BaseModel):
     bounds: tuple[float, float, float, float] | None = None
     date_range: tuple[str, str] | None = None
     custom: dict[str, Any] = Field(default_factory=dict)
+    output_modalities: set[str] = Field(default_factory=lambda: {"table"})
+    feature_catalog: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         """Pydantic configuration."""
