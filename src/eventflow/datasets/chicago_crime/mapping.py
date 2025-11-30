@@ -47,27 +47,23 @@ def clean_chicago_data(lf: pl.LazyFrame) -> pl.LazyFrame:
     """
     logger.info("Applying data cleaning to Chicago crime data")
     # Parse date column
-    lf = lf.with_columns([
-        pl.col("date").str.to_datetime("%m/%d/%Y %I:%M:%S %p").alias("date")
-    ])
+    lf = lf.with_columns([pl.col("date").str.to_datetime("%m/%d/%Y %I:%M:%S %p").alias("date")])
 
     # Filter out rows with missing coordinates
-    lf = lf.filter(
-        pl.col("latitude").is_not_null() &
-        pl.col("longitude").is_not_null()
-    )
+    lf = lf.filter(pl.col("latitude").is_not_null() & pl.col("longitude").is_not_null())
 
     # Filter out invalid coordinates
     lf = lf.filter(
-        (pl.col("latitude").is_between(-90, 90)) &
-        (pl.col("longitude").is_between(-180, 180))
+        (pl.col("latitude").is_between(-90, 90)) & (pl.col("longitude").is_between(-180, 180))
     )
 
     # Convert boolean-like columns
-    lf = lf.with_columns([
-        (pl.col("arrest") == "true").alias("arrest"),
-        (pl.col("domestic") == "true").alias("domestic"),
-    ])
+    lf = lf.with_columns(
+        [
+            (pl.col("arrest") == "true").alias("arrest"),
+            (pl.col("domestic") == "true").alias("domestic"),
+        ]
+    )
 
     logger.info("Data cleaning completed")
     return lf

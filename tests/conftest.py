@@ -1,8 +1,7 @@
 """Common test fixtures and utilities."""
 
-import pytest
 import polars as pl
-from pathlib import Path
+import pytest
 
 
 @pytest.fixture
@@ -27,7 +26,5 @@ def sample_events():
         "type": ["A", "B", "A"],
         "value": [1, 2, 3],
     }
-    
-    return pl.DataFrame(data).with_columns([
-        pl.col("timestamp").str.to_datetime()
-    ])
+
+    return pl.DataFrame(data).with_columns([pl.col("timestamp").str.to_datetime()])

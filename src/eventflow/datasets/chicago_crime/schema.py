@@ -28,6 +28,8 @@ CHICAGO_CRIME_SCHEMA = EventSchema(
         "y_coordinate",
     ],
 )
+
+
 def create_chicago_metadata(
     *,
     dataset_name: str = "chicago_crime",
@@ -55,8 +57,6 @@ def create_chicago_metadata(
     )
 
     if output_modalities is not None:
-        metadata = metadata.model_copy(
-            update={"output_modalities": set(output_modalities)}
-        )
+        metadata = metadata.model_copy(update={"output_modalities": set(output_modalities)})
 
     return metadata

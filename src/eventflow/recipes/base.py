@@ -1,8 +1,9 @@
 """Base recipe abstraction."""
 
 from abc import ABC, abstractmethod
-from eventflow.core.pipeline import Pipeline
+
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.pipeline import Pipeline
 from eventflow.core.registry import StepRegistry
 from eventflow.core.schema import RecipeConfig
 
@@ -10,7 +11,7 @@ from eventflow.core.schema import RecipeConfig
 class BaseRecipe(ABC):
     """
     Base class for all recipes.
-    
+
     A recipe encapsulates a complete feature engineering pipeline
     for a specific dataset and use case.
     """
@@ -23,7 +24,7 @@ class BaseRecipe(ABC):
     ) -> None:
         """
         Initialize recipe.
-        
+
         Args:
             config: Recipe configuration
         """
@@ -35,7 +36,7 @@ class BaseRecipe(ABC):
     def build_pipeline(self) -> Pipeline:
         """
         Build the transformation pipeline.
-        
+
         Returns:
             Pipeline with all transformation steps
         """

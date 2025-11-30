@@ -1,15 +1,15 @@
 """MLflow implementation of TrackerProtocol."""
 
-from typing import Any
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 
 class MLflowTracker:
     """
     MLflow implementation of experiment tracking.
-    
+
     Note: This requires mlflow to be installed (optional dependency).
     """
 
@@ -17,11 +17,10 @@ class MLflowTracker:
         """Initialize MLflow tracker."""
         try:
             import mlflow
+
             self.mlflow = mlflow
-        except ImportError:
-            raise ImportError(
-                "MLflow is not installed. Install with: pip install mlflow"
-            )
+        except ImportError as err:
+            raise ImportError("MLflow is not installed. Install with: pip install mlflow") from err
 
     def log_param(self, key: str, value: Any) -> None:
         """Log a parameter to MLflow."""

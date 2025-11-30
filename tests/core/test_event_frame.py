@@ -1,9 +1,10 @@
 """Tests for EventFrame."""
 
-import pytest
 import polars as pl
+import pytest
+
 from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventSchema, EventMetadata
+from eventflow.core.schema import EventMetadata, EventSchema
 
 
 @pytest.fixture
@@ -16,11 +17,9 @@ def sample_event_frame():
         "type": ["A", "B"],
         "value": [1, 2],
     }
-    
-    lf = pl.LazyFrame(data).with_columns([
-        pl.col("timestamp").str.to_datetime()
-    ])
-    
+
+    lf = pl.LazyFrame(data).with_columns([pl.col("timestamp").str.to_datetime()])
+
     schema = EventSchema(
         timestamp_col="timestamp",
         lat_col="latitude",
@@ -28,13 +27,13 @@ def sample_event_frame():
         categorical_cols=["type"],
         numeric_cols=["value"],
     )
-    
+
     metadata = EventMetadata(
         dataset_name="test",
         crs="EPSG:4326",
         time_zone="UTC",
     )
-    
+
     return EventFrame(lf, schema, metadata)
 
 
@@ -72,9 +71,7 @@ def test_event_frame_select(sample_event_frame):
 
 def test_event_frame_with_columns(sample_event_frame):
     """Test adding columns."""
-    new_ef = sample_event_frame.with_columns(
-        new_col=pl.lit("test")
-    )
+    new_ef = sample_event_frame.with_columns(new_col=pl.lit("test"))
     df = new_ef.collect()
     assert "new_col" in df.columns
 

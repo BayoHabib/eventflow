@@ -1,18 +1,18 @@
 """Context enrichment module for joining external data sources."""
 
-from eventflow.core.context.sources import (
-    BaseContextSource,
-    StaticSpatialSource,
-    StaticTemporalSource,
-    DynamicTemporalSource,
-    SpatioTemporalSource,
-)
+from eventflow.core.context.enricher import EnricherStep
 from eventflow.core.context.joiners import (
-    TemporalJoin,
     SpatialJoin,
     SpatioTemporalJoin,
+    TemporalJoin,
 )
-from eventflow.core.context.enricher import EnricherStep
+from eventflow.core.context.sources import (
+    BaseContextSource,
+    DynamicTemporalSource,
+    SpatioTemporalSource,
+    StaticSpatialSource,
+    StaticTemporalSource,
+)
 
 __all__ = [
     "BaseContextSource",

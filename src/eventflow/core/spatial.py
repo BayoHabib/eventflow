@@ -40,17 +40,27 @@ def transform_crs(
     )
 
     # Transform coordinates
-    lf = event_frame.lazy_frame.with_columns([
-        pl.struct([schema.lon_col, schema.lat_col])
-        .map_elements(
-            lambda coord: transformer.transform(coord[schema.lon_col], coord[schema.lat_col]),
-            return_dtype=pl.List(pl.Float64),
+    lf = (
+        event_frame.lazy_frame.with_columns(
+            [
+                pl.struct([schema.lon_col, schema.lat_col])
+                .map_elements(
+                    lambda coord: transformer.transform(
+                        coord[schema.lon_col], coord[schema.lat_col]
+                    ),
+                    return_dtype=pl.List(pl.Float64),
+                )
+                .alias("_transformed")
+            ]
         )
-        .alias("_transformed")
-    ]).with_columns([
-        pl.col("_transformed").list.get(0).alias(f"{schema.lon_col}_proj"),
-        pl.col("_transformed").list.get(1).alias(f"{schema.lat_col}_proj"),
-    ]).drop("_transformed")
+        .with_columns(
+            [
+                pl.col("_transformed").list.get(0).alias(f"{schema.lon_col}_proj"),
+                pl.col("_transformed").list.get(1).alias(f"{schema.lat_col}_proj"),
+            ]
+        )
+        .drop("_transformed")
+    )
 
     return event_frame.with_lazy_frame(lf).with_metadata(crs=target_crs)
 
@@ -77,7 +87,9 @@ def create_grid(
     n_cols = int((maxx - minx) / size_m) + 1
     n_rows = int((maxy - miny) / size_m) + 1
 
-    logger.info(f"Creating spatial grid: {n_cols}x{n_rows} cells ({n_cols * n_rows} total) at {size_m}m resolution")
+    logger.info(
+        f"Creating spatial grid: {n_cols}x{n_rows} cells ({n_cols * n_rows} total) at {size_m}m resolution"
+    )
 
     # Generate grid cells
     cells = []
@@ -90,14 +102,16 @@ def create_grid(
             cell_maxx = cell_minx + size_m
             cell_maxy = cell_miny + size_m
 
-            cells.append({
-                "grid_id": grid_id,
-                "minx": cell_minx,
-                "miny": cell_miny,
-                "maxx": cell_maxx,
-                "maxy": cell_maxy,
-                "geometry": geometry.box(cell_minx, cell_miny, cell_maxx, cell_maxy).wkt,
-            })
+            cells.append(
+                {
+                    "grid_id": grid_id,
+                    "minx": cell_minx,
+                    "miny": cell_miny,
+                    "maxx": cell_maxx,
+                    "maxy": cell_maxy,
+                    "geometry": geometry.box(cell_minx, cell_miny, cell_maxx, cell_maxy).wkt,
+                }
+            )
             grid_id += 1
 
     return pl.DataFrame(cells)
@@ -140,18 +154,26 @@ def assign_to_grid(
     unique_minx = set(grid_data["minx"])
     n_cols = max(len(unique_minx), 1)
 
-    lf = lf.with_columns([
-        (
-            ((pl.col(schema.lon_col) - min_x) / grid_size).floor().cast(pl.Int32)
-        ).alias("_col_idx"),
-        (
-            ((pl.col(schema.lat_col) - min_y) / grid_size).floor().cast(pl.Int32)
-        ).alias("_row_idx"),
-    ]).with_columns([
-        (
-            pl.col("_row_idx") * pl.lit(n_cols, dtype=pl.Int32) + pl.col("_col_idx")
-        ).alias("grid_id")
-    ]).drop(["_col_idx", "_row_idx"])
+    lf = (
+        lf.with_columns(
+            [
+                (((pl.col(schema.lon_col) - min_x) / grid_size).floor().cast(pl.Int32)).alias(
+                    "_col_idx"
+                ),
+                (((pl.col(schema.lat_col) - min_y) / grid_size).floor().cast(pl.Int32)).alias(
+                    "_row_idx"
+                ),
+            ]
+        )
+        .with_columns(
+            [
+                (pl.col("_row_idx") * pl.lit(n_cols, dtype=pl.Int32) + pl.col("_col_idx")).alias(
+                    "grid_id"
+                )
+            ]
+        )
+        .drop(["_col_idx", "_row_idx"])
+    )
 
     return event_frame.with_lazy_frame(lf)
 
@@ -202,14 +224,16 @@ def assign_to_zones(
             return zone_id
         return None
 
-    lf = event_frame.lazy_frame.with_columns([
-        pl.struct([schema.lon_col, schema.lat_col])
-        .map_elements(
-            lambda coord: find_zone(coord[schema.lon_col], coord[schema.lat_col]),
-            return_dtype=pl.Int32,
-        )
-        .alias("zone_id")
-    ])
+    lf = event_frame.lazy_frame.with_columns(
+        [
+            pl.struct([schema.lon_col, schema.lat_col])
+            .map_elements(
+                lambda coord: find_zone(coord[schema.lon_col], coord[schema.lat_col]),
+                return_dtype=pl.Int32,
+            )
+            .alias("zone_id")
+        ]
+    )
 
     return event_frame.with_lazy_frame(lf)
 
@@ -247,11 +271,16 @@ def compute_distances(
         poi_lon = poi[poi_lon_col]
         poi_lat = poi[poi_lat_col]
 
-        lf = lf.with_columns([
-            (
-                ((pl.col(schema.lon_col) - poi_lon) ** 2
-                 + (pl.col(schema.lat_col) - poi_lat) ** 2) ** 0.5
-            ).alias(f"dist_to_{poi_name}")
-        ])
+        lf = lf.with_columns(
+            [
+                (
+                    (
+                        (pl.col(schema.lon_col) - poi_lon) ** 2
+                        + (pl.col(schema.lat_col) - poi_lat) ** 2
+                    )
+                    ** 0.5
+                ).alias(f"dist_to_{poi_name}")
+            ]
+        )
 
     return event_frame.with_lazy_frame(lf)

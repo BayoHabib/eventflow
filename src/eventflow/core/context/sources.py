@@ -1,14 +1,16 @@
 """Base classes for context data sources."""
 
 from abc import ABC, abstractmethod
+
 import polars as pl
+
 from eventflow.core.schema import ContextSchema
 
 
 class BaseContextSource(ABC):
     """
     Base class for all context data sources.
-    
+
     A context source provides external data that can be joined with events
     (e.g., weather, demographics, special events).
     """
@@ -17,7 +19,7 @@ class BaseContextSource(ABC):
     def load(self) -> pl.LazyFrame:
         """
         Load the context data.
-        
+
         Returns:
             LazyFrame with context data
         """
@@ -28,7 +30,7 @@ class BaseContextSource(ABC):
     def schema(self) -> ContextSchema:
         """
         Get the schema of the context data.
-        
+
         Returns:
             ContextSchema describing the structure
         """
@@ -42,14 +44,14 @@ class BaseContextSource(ABC):
 class StaticSpatialSource(BaseContextSource):
     """
     Context source with static spatial data (no temporal dimension).
-    
+
     Examples: Census demographics, neighborhood boundaries, POIs.
     """
 
     def __init__(self, data_path: str) -> None:
         """
         Initialize static spatial source.
-        
+
         Args:
             data_path: Path to data file(s)
         """
@@ -70,14 +72,14 @@ class StaticSpatialSource(BaseContextSource):
 class StaticTemporalSource(BaseContextSource):
     """
     Context source with static temporal data (no spatial dimension).
-    
+
     Examples: Global economic indicators, holidays.
     """
 
     def __init__(self, data_path: str) -> None:
         """
         Initialize static temporal source.
-        
+
         Args:
             data_path: Path to data file(s)
         """
@@ -98,14 +100,14 @@ class StaticTemporalSource(BaseContextSource):
 class DynamicTemporalSource(BaseContextSource):
     """
     Context source with dynamic temporal data (time series).
-    
+
     Examples: Weather data, stock prices.
     """
 
     def __init__(self, data_path: str) -> None:
         """
         Initialize dynamic temporal source.
-        
+
         Args:
             data_path: Path to data file(s)
         """
@@ -126,14 +128,14 @@ class DynamicTemporalSource(BaseContextSource):
 class SpatioTemporalSource(BaseContextSource):
     """
     Context source with both spatial and temporal dimensions.
-    
+
     Examples: Regional weather, traffic sensors, mobile network data.
     """
 
     def __init__(self, data_path: str) -> None:
         """
         Initialize spatio-temporal source.
-        
+
         Args:
             data_path: Path to data file(s)
         """

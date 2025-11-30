@@ -42,7 +42,9 @@ class Pipeline:
             steps: List of Step instances to apply in sequence
         """
         self.steps = steps
-        logger.info(f"Created pipeline with {len(steps)} steps: {[s.__class__.__name__ for s in steps]}")
+        logger.info(
+            f"Created pipeline with {len(steps)} steps: {[s.__class__.__name__ for s in steps]}"
+        )
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """

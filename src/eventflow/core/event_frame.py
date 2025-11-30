@@ -173,11 +173,11 @@ class EventFrame:
         Returns:
             New EventFrame with added/transformed columns
         """
-        return self.with_lazy_frame(
-            self.lazy_frame.with_columns(*exprs, **named_exprs)
-        )
+        return self.with_lazy_frame(self.lazy_frame.with_columns(*exprs, **named_exprs))
 
-    def sort(self, by: str | pl.Expr | list[str | pl.Expr], descending: bool = False) -> "EventFrame":
+    def sort(
+        self, by: str | pl.Expr | list[str | pl.Expr], descending: bool = False
+    ) -> "EventFrame":
         """
         Sort the event frame.
 
