@@ -253,7 +253,7 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
                 import torch
 
                 X, y = output.get_X_y()
-                data = {"X": torch.from_numpy(X)}
+                data: dict[str, Any] = {"X": torch.from_numpy(X)}
                 if y is not None:
                     data["y"] = torch.from_numpy(y)
                 data["feature_names"] = output.feature_names
