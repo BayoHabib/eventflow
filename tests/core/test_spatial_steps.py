@@ -252,9 +252,7 @@ class TestSpatialLagStep:
     def test_multiple_value_cols(self, gridded_event_frame: EventFrame) -> None:
         """Test spatial lag with multiple value columns."""
         # Add another numeric column
-        lf = gridded_event_frame.lazy_frame.with_columns(
-            (pl.col("value") * 2).alias("value2")
-        )
+        lf = gridded_event_frame.lazy_frame.with_columns((pl.col("value") * 2).alias("value2"))
         ef = gridded_event_frame.with_lazy_frame(lf)
 
         step = SpatialLagStep(value_cols=["value", "value2"], neighbor_col="grid_id")

@@ -137,9 +137,7 @@ class ExtractTemporalComponentsStep(Step):
         self.components = list(components)
 
     @classmethod
-    def with_components(
-        cls, components: Sequence[str]
-    ) -> type[ExtractTemporalComponentsStep]:
+    def with_components(cls, components: Sequence[str]) -> type[ExtractTemporalComponentsStep]:
         """Builder API to configure components."""
 
         class ConfiguredStep(ExtractTemporalComponentsStep):

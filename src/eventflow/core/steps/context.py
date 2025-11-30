@@ -176,9 +176,7 @@ class SpatialContextJoinStep(Step):
         for col in self.context_cols:
             col_name = col  # Capture in local variable for lambda
 
-            def get_col_value(
-                coord: dict[str, float], c: str = col_name
-            ) -> Any:
+            def get_col_value(coord: dict[str, float], c: str = col_name) -> Any:
                 return find_context(coord[lon_col], coord[lat_col]).get(c, self.fill_value)
 
             lf = lf.with_columns(
