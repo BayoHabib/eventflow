@@ -169,8 +169,9 @@ If you use Eventflow in your research, please cite:
 @software{eventflow2024,
   title = {Eventflow: A Generic Spatio-Temporal Event Transformation Engine},
   author = {Habib Bayo},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/eventflow/eventflow}
 }
 ```
+
 
