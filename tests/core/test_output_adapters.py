@@ -896,34 +896,49 @@ class TestPlainDataFrameInputs:
         n_records = 100
         base_date = datetime(2024, 1, 1)
 
-        return pl.DataFrame({
-            "case_id": [f"JE{i}" for i in range(n_records)],
-            "timestamp": [base_date + timedelta(hours=np.random.randint(0, 24*10))
-                         for _ in range(n_records)],
-            "latitude": np.random.uniform(41.6, 42.0, n_records),
-            "longitude": np.random.uniform(-87.9, -87.5, n_records),
-            "primary_type": np.random.choice(["THEFT", "BATTERY", "ASSAULT"], n_records),
-            "cell_id": np.random.randint(0, 25, n_records),
-            "event_count": np.random.poisson(3, n_records),
-        })
+        return pl.DataFrame(
+            {
+                "case_id": [f"JE{i}" for i in range(n_records)],
+                "timestamp": [
+                    base_date + timedelta(hours=np.random.randint(0, 24 * 10))
+                    for _ in range(n_records)
+                ],
+                "latitude": np.random.uniform(41.6, 42.0, n_records),
+                "longitude": np.random.uniform(-87.9, -87.5, n_records),
+                "primary_type": np.random.choice(["THEFT", "BATTERY", "ASSAULT"], n_records),
+                "cell_id": np.random.randint(0, 25, n_records),
+                "event_count": np.random.poisson(3, n_records),
+            }
+        )
 
     @pytest.fixture
     def plain_aggregated_df(self, plain_crime_df: pl.DataFrame) -> pl.DataFrame:
         """Create aggregated daily counts per cell."""
-        return plain_crime_df.with_columns([
-            pl.col("timestamp").dt.date().alias("date"),
-        ]).group_by(["cell_id", "date"]).agg([
-            pl.len().alias("event_count"),
-            pl.col("latitude").mean().alias("centroid_lat"),
-            pl.col("longitude").mean().alias("centroid_lon"),
-        ]).sort(["date", "cell_id"])
+        return (
+            plain_crime_df.with_columns(
+                [
+                    pl.col("timestamp").dt.date().alias("date"),
+                ]
+            )
+            .group_by(["cell_id", "date"])
+            .agg(
+                [
+                    pl.len().alias("event_count"),
+                    pl.col("latitude").mean().alias("centroid_lat"),
+                    pl.col("longitude").mean().alias("centroid_lon"),
+                ]
+            )
+            .sort(["date", "cell_id"])
+        )
 
     def test_table_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
         """TableAdapter should work with plain DataFrame."""
-        df = plain_aggregated_df.with_columns([
-            pl.col("date").dt.weekday().alias("day_of_week"),
-            pl.lit(1.0).alias("exposure"),
-        ])
+        df = plain_aggregated_df.with_columns(
+            [
+                pl.col("date").dt.weekday().alias("day_of_week"),
+                pl.lit(1.0).alias("exposure"),
+            ]
+        )
 
         config = TableAdapterConfig(
             target_col="event_count",
@@ -980,11 +995,17 @@ class TestPlainDataFrameInputs:
     def test_graph_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
         """GraphAdapter should work with plain DataFrame."""
         # Aggregate to node features
-        node_df = plain_aggregated_df.group_by("cell_id").agg([
-            pl.col("event_count").sum().alias("total_events"),
-            pl.col("centroid_lat").mean().alias("lat"),
-            pl.col("centroid_lon").mean().alias("lon"),
-        ]).sort("cell_id")
+        node_df = (
+            plain_aggregated_df.group_by("cell_id")
+            .agg(
+                [
+                    pl.col("event_count").sum().alias("total_events"),
+                    pl.col("centroid_lat").mean().alias("lat"),
+                    pl.col("centroid_lon").mean().alias("lon"),
+                ]
+            )
+            .sort("cell_id")
+        )
 
         config = GraphAdapterConfig(
             node_col="cell_id",
@@ -1032,4 +1053,3 @@ class TestPlainDataFrameInputs:
 
         # Should auto-collect and process
         assert output.timestamps.shape[0] == len(plain_crime_df)
-

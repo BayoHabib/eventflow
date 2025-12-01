@@ -151,7 +151,9 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
             elif "cell_id" in cols:
                 spatial_col = "cell_id"
             else:
-                raise ValueError("spatial_col must be specified or grid_id/zone_id/cell_id must exist")
+                raise ValueError(
+                    "spatial_col must be specified or grid_id/zone_id/cell_id must exist"
+                )
 
         # Collect data
         if hasattr(event_frame, "collect"):
