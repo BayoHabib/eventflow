@@ -884,7 +884,7 @@ class TestEdgeCases:
 
 class TestPlainDataFrameInputs:
     """Test that adapters work with plain Polars DataFrames (not EventFrame objects).
-    
+
     This is important for users who want to use adapters without the full EventFrame
     abstraction, such as in notebooks or quick experiments.
     """
@@ -895,10 +895,10 @@ class TestPlainDataFrameInputs:
         np.random.seed(42)
         n_records = 100
         base_date = datetime(2024, 1, 1)
-        
+
         return pl.DataFrame({
             "case_id": [f"JE{i}" for i in range(n_records)],
-            "timestamp": [base_date + timedelta(hours=np.random.randint(0, 24*10)) 
+            "timestamp": [base_date + timedelta(hours=np.random.randint(0, 24*10))
                          for _ in range(n_records)],
             "latitude": np.random.uniform(41.6, 42.0, n_records),
             "longitude": np.random.uniform(-87.9, -87.5, n_records),
@@ -924,7 +924,7 @@ class TestPlainDataFrameInputs:
             pl.col("date").dt.weekday().alias("day_of_week"),
             pl.lit(1.0).alias("exposure"),
         ])
-        
+
         config = TableAdapterConfig(
             target_col="event_count",
             feature_cols=["cell_id", "day_of_week"],
@@ -932,11 +932,11 @@ class TestPlainDataFrameInputs:
         )
         adapter = TableAdapter(config)
         output = adapter.convert(df)
-        
+
         assert output.data.shape[0] == len(df)
         assert "cell_id" in output.feature_names
         assert "day_of_week" in output.feature_names
-        
+
         X, y = output.get_X_y()
         assert X.shape[0] == len(df)
         assert y is not None
@@ -953,7 +953,7 @@ class TestPlainDataFrameInputs:
         )
         adapter = SequenceAdapter(config)
         output = adapter.convert(plain_aggregated_df)
-        
+
         n_locations = plain_aggregated_df["cell_id"].n_unique()
         assert output.sequences.shape[0] == n_locations
         assert output.sequences.shape[1] == 10  # sequence_length
@@ -971,7 +971,7 @@ class TestPlainDataFrameInputs:
         )
         adapter = RasterAdapter(config)
         output = adapter.convert(plain_aggregated_df)
-        
+
         n_timesteps = plain_aggregated_df["date"].n_unique()
         assert output.raster.shape[0] == n_timesteps
         assert output.raster.shape[1] == 1  # 1 feature/channel
@@ -985,7 +985,7 @@ class TestPlainDataFrameInputs:
             pl.col("centroid_lat").mean().alias("lat"),
             pl.col("centroid_lon").mean().alias("lon"),
         ]).sort("cell_id")
-        
+
         config = GraphAdapterConfig(
             node_col="cell_id",
             feature_cols=["total_events", "lat", "lon"],
@@ -995,7 +995,7 @@ class TestPlainDataFrameInputs:
         )
         adapter = GraphAdapter(config)
         output = adapter.convert(node_df)
-        
+
         n_nodes = len(node_df)
         assert output.node_features.shape[0] == n_nodes
         assert output.node_features.shape[1] == 3  # 3 features
@@ -1013,7 +1013,7 @@ class TestPlainDataFrameInputs:
         )
         adapter = StreamAdapter(config)
         output = adapter.convert(plain_crime_df)
-        
+
         assert output.timestamps.shape[0] == len(plain_crime_df)
         assert output.states.shape == (len(plain_crime_df), 2)  # lat, lon
         assert output.inter_times.shape[0] == len(plain_crime_df)
@@ -1022,14 +1022,14 @@ class TestPlainDataFrameInputs:
     def test_adapters_with_lazyframe(self, plain_crime_df: pl.DataFrame) -> None:
         """Adapters should also work with LazyFrame (not just DataFrame)."""
         lf = plain_crime_df.lazy()
-        
+
         config = StreamAdapterConfig(
             timestamp_col="timestamp",
             state_cols=["latitude", "longitude"],
         )
         adapter = StreamAdapter(config)
         output = adapter.convert(lf)
-        
+
         # Should auto-collect and process
         assert output.timestamps.shape[0] == len(plain_crime_df)
 
