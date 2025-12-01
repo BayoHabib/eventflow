@@ -117,17 +117,33 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
 
         # Get configuration
         spatial_col = self.config.spatial_col
-        has_schema = hasattr(event_frame, "schema")
+        
+        # Check if this is an EventFrame (has EventSchema) vs plain DataFrame/LazyFrame
+        has_schema = False
+        event_schema = None
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+        
+        if not is_polars_lazy and not is_polars_dataframe:
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_schema = hasattr(event_schema, "timestamp_col")
+        
         timestamp_col = self.config.timestamp_col
         if timestamp_col is None:
-            if has_schema and event_frame.schema.timestamp_col:
-                timestamp_col = event_frame.schema.timestamp_col
+            if has_schema and event_schema and event_schema.timestamp_col:
+                timestamp_col = event_schema.timestamp_col
             else:
                 timestamp_col = "timestamp"
 
         if spatial_col is None:
             # Try to infer spatial column
-            cols = event_frame.columns if hasattr(event_frame, "columns") else event_frame.collect_schema().names()
+            if hasattr(event_frame, "columns"):
+                cols = event_frame.columns
+            elif hasattr(event_frame, "collect_schema"):
+                cols = event_frame.collect_schema().names()
+            else:
+                cols = []  # fallback
             if "grid_id" in cols:
                 spatial_col = "grid_id"
             elif "zone_id" in cols:
@@ -141,20 +157,20 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
         if hasattr(event_frame, "collect"):
             df = event_frame.collect()
         else:
-            df = event_frame
+            df = event_frame  # type: ignore[assignment]
 
         # Determine feature columns
         if self.config.feature_cols is not None:
             feature_cols = list(self.config.feature_cols)
         else:
             exclude = {spatial_col, timestamp_col}
-            if has_schema:
-                if event_frame.schema.lat_col:
-                    exclude.add(event_frame.schema.lat_col)
-                if event_frame.schema.lon_col:
-                    exclude.add(event_frame.schema.lon_col)
-                if event_frame.schema.geometry_col:
-                    exclude.add(event_frame.schema.geometry_col)
+            if has_schema and event_schema:
+                if event_schema.lat_col:
+                    exclude.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude.add(event_schema.geometry_col)
 
             feature_cols = [
                 col

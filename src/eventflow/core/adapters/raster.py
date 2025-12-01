@@ -133,15 +133,21 @@ class RasterAdapter(BaseModalityAdapter[RasterOutput]):
 
         # Get configuration
         grid_col = self.config.grid_col or "grid_id"
-        # Check if this is an EventFrame (has schema with timestamp_col) vs plain DataFrame
-        has_eventframe_schema = (
-            hasattr(event_frame, "schema") and 
-            hasattr(event_frame.schema, "timestamp_col")
-        )
+        # Check if this is an EventFrame (has EventSchema) vs plain DataFrame/LazyFrame
+        has_eventframe_schema = False
+        event_schema = None
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+        
+        if not is_polars_lazy and not is_polars_dataframe:
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_eventframe_schema = hasattr(event_schema, "timestamp_col")
+        
         timestamp_col = self.config.timestamp_col
         if timestamp_col is None:
-            if has_eventframe_schema and event_frame.schema.timestamp_col:
-                timestamp_col = event_frame.schema.timestamp_col
+            if has_eventframe_schema and event_schema and event_schema.timestamp_col:
+                timestamp_col = event_schema.timestamp_col
             else:
                 timestamp_col = "timestamp"
 
@@ -149,7 +155,7 @@ class RasterAdapter(BaseModalityAdapter[RasterOutput]):
         if hasattr(event_frame, "collect"):
             df = event_frame.collect()
         else:
-            df = event_frame
+            df = event_frame  # type: ignore[assignment]
 
         if grid_col not in df.columns:
             raise ValueError(f"Grid column '{grid_col}' not found in EventFrame")
@@ -159,13 +165,13 @@ class RasterAdapter(BaseModalityAdapter[RasterOutput]):
             feature_cols = list(self.config.feature_cols)
         else:
             exclude = {grid_col, timestamp_col}
-            if has_eventframe_schema:
-                if event_frame.schema.lat_col:
-                    exclude.add(event_frame.schema.lat_col)
-                if event_frame.schema.lon_col:
-                    exclude.add(event_frame.schema.lon_col)
-                if event_frame.schema.geometry_col:
-                    exclude.add(event_frame.schema.geometry_col)
+            if has_eventframe_schema and event_schema:
+                if event_schema.lat_col:
+                    exclude.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude.add(event_schema.geometry_col)
 
             feature_cols = [
                 col

@@ -122,11 +122,22 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
         """
         logger.info("Converting EventFrame to table format")
 
+        # Check if this is an EventFrame (has EventSchema) vs plain DataFrame/LazyFrame
+        has_eventframe_schema = False
+        event_schema = None
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+        
+        if not is_polars_lazy and not is_polars_dataframe:
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_eventframe_schema = hasattr(event_schema, "timestamp_col")
+
         # Collect the lazy frame if needed
         if hasattr(event_frame, "collect"):
             df = event_frame.collect()
         else:
-            df = event_frame
+            df = event_frame  # type: ignore[assignment]
 
         # Determine feature columns
         if self.config.feature_cols is not None:
@@ -141,14 +152,15 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
             if self.config.weight_col:
                 exclude_cols.add(self.config.weight_col)
 
-            # Also exclude timestamp and geometry columns
-            exclude_cols.add(event_frame.schema.timestamp_col)
-            if event_frame.schema.lat_col:
-                exclude_cols.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude_cols.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude_cols.add(event_frame.schema.geometry_col)
+            # Also exclude timestamp and geometry columns if EventFrame
+            if has_eventframe_schema and event_schema:
+                exclude_cols.add(event_schema.timestamp_col)
+                if event_schema.lat_col:
+                    exclude_cols.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude_cols.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude_cols.add(event_schema.geometry_col)
 
             feature_cols = [
                 col
