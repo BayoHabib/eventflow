@@ -64,7 +64,7 @@ class SequenceOutput:
     def to_torch(self) -> dict[str, Any]:
         """Convert to PyTorch tensors."""
         try:
-            import torch  # type: ignore
+            import torch
 
             result: dict[str, Any] = {
                 "sequences": torch.from_numpy(self.sequences),

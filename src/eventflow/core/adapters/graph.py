@@ -93,7 +93,7 @@ class GraphOutput:
     def to_torch_geometric(self) -> dict[str, Any]:
         """Convert to PyTorch Geometric format."""
         try:
-            import torch  # type: ignore
+            import torch
 
             result: dict[str, Any] = {
                 "x": torch.from_numpy(self.node_features),

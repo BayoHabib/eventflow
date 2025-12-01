@@ -73,7 +73,7 @@ class StreamOutput:
     def to_torch(self) -> dict[str, Any]:
         """Convert to PyTorch tensors."""
         try:
-            import torch  # type: ignore
+            import torch
 
             result: dict[str, Any] = {
                 "timestamps": torch.from_numpy(self.timestamps),
