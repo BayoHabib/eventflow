@@ -946,7 +946,7 @@ class TestPlainDataFrameInputs:
             offset_col="exposure",
         )
         adapter = TableAdapter(config)
-        output = adapter.convert(df)
+        output = adapter.convert(df)  # type: ignore[arg-type]
 
         assert output.data.shape[0] == len(df)
         assert "cell_id" in output.feature_names
@@ -967,7 +967,7 @@ class TestPlainDataFrameInputs:
             padding_value=0.0,
         )
         adapter = SequenceAdapter(config)
-        output = adapter.convert(plain_aggregated_df)
+        output = adapter.convert(plain_aggregated_df)  # type: ignore[arg-type]
 
         n_locations = plain_aggregated_df["cell_id"].n_unique()
         assert output.sequences.shape[0] == n_locations
@@ -985,7 +985,7 @@ class TestPlainDataFrameInputs:
             channel_first=True,
         )
         adapter = RasterAdapter(config)
-        output = adapter.convert(plain_aggregated_df)
+        output = adapter.convert(plain_aggregated_df)  # type: ignore[arg-type]
 
         n_timesteps = plain_aggregated_df["date"].n_unique()
         assert output.raster.shape[0] == n_timesteps
@@ -1015,12 +1015,13 @@ class TestPlainDataFrameInputs:
             include_self_loops=True,
         )
         adapter = GraphAdapter(config)
-        output = adapter.convert(node_df)
+        output = adapter.convert(node_df)  # type: ignore[arg-type]
 
         n_nodes = len(node_df)
         assert output.node_features.shape[0] == n_nodes
         assert output.node_features.shape[1] == 3  # 3 features
         assert output.edge_index.shape[0] == 2  # src, dst
+        assert output.adjacency is not None
         assert output.adjacency.shape == (n_nodes, n_nodes)
 
     def test_stream_adapter_plain_dataframe(self, plain_crime_df: pl.DataFrame) -> None:
@@ -1033,11 +1034,12 @@ class TestPlainDataFrameInputs:
             time_origin="first",
         )
         adapter = StreamAdapter(config)
-        output = adapter.convert(plain_crime_df)
+        output = adapter.convert(plain_crime_df)  # type: ignore[arg-type]
 
         assert output.timestamps.shape[0] == len(plain_crime_df)
         assert output.states.shape == (len(plain_crime_df), 2)  # lat, lon
         assert output.inter_times.shape[0] == len(plain_crime_df)
+        assert output.event_types is not None
         assert output.event_types.shape[0] == len(plain_crime_df)
 
     def test_adapters_with_lazyframe(self, plain_crime_df: pl.DataFrame) -> None:
@@ -1049,7 +1051,7 @@ class TestPlainDataFrameInputs:
             state_cols=["latitude", "longitude"],
         )
         adapter = StreamAdapter(config)
-        output = adapter.convert(lf)
+        output = adapter.convert(lf)  # type: ignore[arg-type]
 
         # Should auto-collect and process
         assert output.timestamps.shape[0] == len(plain_crime_df)
