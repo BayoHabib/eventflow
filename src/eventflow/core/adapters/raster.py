@@ -138,12 +138,12 @@ class RasterAdapter(BaseModalityAdapter[RasterOutput]):
         event_schema = None
         is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
         is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
-        
+
         if not is_polars_lazy and not is_polars_dataframe:
             if hasattr(event_frame, "schema"):
                 event_schema = event_frame.schema
                 has_eventframe_schema = hasattr(event_schema, "timestamp_col")
-        
+
         timestamp_col = self.config.timestamp_col
         if timestamp_col is None:
             if has_eventframe_schema and event_schema and event_schema.timestamp_col:

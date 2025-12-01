@@ -127,7 +127,7 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
         event_schema = None
         is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
         is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
-        
+
         if not is_polars_lazy and not is_polars_dataframe:
             if hasattr(event_frame, "schema"):
                 event_schema = event_frame.schema
