@@ -19,7 +19,7 @@ from eventflow.core.adapters.configs import TableAdapterConfig
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
-    import pandas as pd
+    import pandas as pd  # type: ignore[import-untyped]
 
     from eventflow.core.event_frame import EventFrame
 
@@ -265,7 +265,7 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
 
         elif fmt == SerializationFormat.PYTORCH:
             try:
-                import torch
+                import torch  # type: ignore[import-not-found]
 
                 X, y = output.get_X_y()
                 data: dict[str, Any] = {
