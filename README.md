@@ -1,5 +1,10 @@
 # Eventflow
 
+[![Test & Lint](https://github.com/BayoHabib/eventflow/actions/workflows/test.yml/badge.svg)](https://github.com/BayoHabib/eventflow/actions)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/BayoHabib/eventflow/releases)
+
 A high-performance, generic spatio-temporal event transformation engine for feature engineering and MLOps pipelines.
 
 ## Overview
