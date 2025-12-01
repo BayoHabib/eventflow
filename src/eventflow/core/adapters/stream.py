@@ -142,10 +142,32 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
         logger.info("Converting EventFrame to stream format")
 
         # Get configuration
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+        # Check if this is an EventFrame (has EventSchema with timestamp_col) vs plain DataFrame/LazyFrame
+        # Avoid accessing .schema on Polars LazyFrame to prevent PerformanceWarning
+        has_eventframe_schema = False
+        event_schema = None
+        # Polars LazyFrame has collect method but EventFrame does not (it wraps a DataFrame)
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+
+        if not is_polars_lazy and not is_polars_dataframe:
+            # Must be EventFrame - access schema
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_eventframe_schema = hasattr(event_schema, "timestamp_col")
+
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_eventframe_schema and event_schema and event_schema.timestamp_col:
+                timestamp_col = event_schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         # Collect data and sort by timestamp
-        df = event_frame.collect().sort(timestamp_col)
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect().sort(timestamp_col)
+        else:
+            df = event_frame.sort(timestamp_col)  # type: ignore[assignment]
 
         # Truncate if max_events specified
         if self.config.max_events is not None:
@@ -158,12 +180,13 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
             exclude = {timestamp_col}
             if self.config.event_type_col:
                 exclude.add(self.config.event_type_col)
-            if event_frame.schema.lat_col:
-                exclude.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude.add(event_frame.schema.geometry_col)
+            if has_eventframe_schema and event_schema:
+                if event_schema.lat_col:
+                    exclude.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude.add(event_schema.geometry_col)
 
             state_cols = [
                 col

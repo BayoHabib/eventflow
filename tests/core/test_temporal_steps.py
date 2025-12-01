@@ -329,10 +329,10 @@ class TestCalendarEncodingStep:
         result = step.run(sample_event_frame)
 
         df = result.collect()
-        assert df["hour_sin"].min() >= -1.0
-        assert df["hour_sin"].max() <= 1.0
-        assert df["hour_cos"].min() >= -1.0
-        assert df["hour_cos"].max() <= 1.0
+        assert float(df["hour_sin"].min()) >= -1.0  # type: ignore[arg-type]
+        assert float(df["hour_sin"].max()) <= 1.0  # type: ignore[arg-type]
+        assert float(df["hour_cos"].min()) >= -1.0  # type: ignore[arg-type]
+        assert float(df["hour_cos"].max()) <= 1.0  # type: ignore[arg-type]
 
 
 class TestInterArrivalStep:

@@ -875,3 +875,183 @@ class TestEdgeCases:
 
         with pytest.raises(ValueError, match="Unsupported format"):
             adapter.serialize(output, tmp_path / "test.pkl", SerializationFormat.PICKLE)
+
+
+# -----------------------------------------------------------------------------
+# Plain DataFrame Input Tests (not wrapped in EventFrame)
+# -----------------------------------------------------------------------------
+
+
+class TestPlainDataFrameInputs:
+    """Test that adapters work with plain Polars DataFrames (not EventFrame objects).
+
+    This is important for users who want to use adapters without the full EventFrame
+    abstraction, such as in notebooks or quick experiments.
+    """
+
+    @pytest.fixture
+    def plain_crime_df(self) -> pl.DataFrame:
+        """Create a plain Polars DataFrame mimicking crime data."""
+        np.random.seed(42)
+        n_records = 100
+        base_date = datetime(2024, 1, 1)
+
+        return pl.DataFrame(
+            {
+                "case_id": [f"JE{i}" for i in range(n_records)],
+                "timestamp": [
+                    base_date + timedelta(hours=np.random.randint(0, 24 * 10))
+                    for _ in range(n_records)
+                ],
+                "latitude": np.random.uniform(41.6, 42.0, n_records),
+                "longitude": np.random.uniform(-87.9, -87.5, n_records),
+                "primary_type": np.random.choice(["THEFT", "BATTERY", "ASSAULT"], n_records),
+                "cell_id": np.random.randint(0, 25, n_records),
+                "event_count": np.random.poisson(3, n_records),
+            }
+        )
+
+    @pytest.fixture
+    def plain_aggregated_df(self, plain_crime_df: pl.DataFrame) -> pl.DataFrame:
+        """Create aggregated daily counts per cell."""
+        return (
+            plain_crime_df.with_columns(
+                [
+                    pl.col("timestamp").dt.date().alias("date"),
+                ]
+            )
+            .group_by(["cell_id", "date"])
+            .agg(
+                [
+                    pl.len().alias("event_count"),
+                    pl.col("latitude").mean().alias("centroid_lat"),
+                    pl.col("longitude").mean().alias("centroid_lon"),
+                ]
+            )
+            .sort(["date", "cell_id"])
+        )
+
+    def test_table_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
+        """TableAdapter should work with plain DataFrame."""
+        df = plain_aggregated_df.with_columns(
+            [
+                pl.col("date").dt.weekday().alias("day_of_week"),
+                pl.lit(1.0).alias("exposure"),
+            ]
+        )
+
+        config = TableAdapterConfig(
+            target_col="event_count",
+            feature_cols=["cell_id", "day_of_week"],
+            offset_col="exposure",
+        )
+        adapter = TableAdapter(config)
+        output = adapter.convert(df)  # type: ignore[arg-type]
+
+        assert output.data.shape[0] == len(df)
+        assert "cell_id" in output.feature_names
+        assert "day_of_week" in output.feature_names
+
+        X, y = output.get_X_y()
+        assert X.shape[0] == len(df)
+        assert y is not None
+        assert y.shape[0] == len(df)
+
+    def test_sequence_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
+        """SequenceAdapter should work with plain DataFrame."""
+        config = SequenceAdapterConfig(
+            spatial_col="cell_id",
+            timestamp_col="date",
+            feature_cols=["event_count"],
+            sequence_length=10,
+            padding_value=0.0,
+        )
+        adapter = SequenceAdapter(config)
+        output = adapter.convert(plain_aggregated_df)  # type: ignore[arg-type]
+
+        n_locations = plain_aggregated_df["cell_id"].n_unique()
+        assert output.sequences.shape[0] == n_locations
+        assert output.sequences.shape[1] == 10  # sequence_length
+        assert output.masks.shape == output.sequences.shape[:2]
+        assert len(output.lengths) == n_locations
+
+    def test_raster_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
+        """RasterAdapter should work with plain DataFrame."""
+        config = RasterAdapterConfig(
+            grid_col="cell_id",
+            timestamp_col="date",
+            feature_cols=["event_count"],
+            grid_shape=(5, 5),
+            channel_first=True,
+        )
+        adapter = RasterAdapter(config)
+        output = adapter.convert(plain_aggregated_df)  # type: ignore[arg-type]
+
+        n_timesteps = plain_aggregated_df["date"].n_unique()
+        assert output.raster.shape[0] == n_timesteps
+        assert output.raster.shape[1] == 1  # 1 feature/channel
+        assert output.raster.shape[2:] == (5, 5)
+
+    def test_graph_adapter_plain_dataframe(self, plain_aggregated_df: pl.DataFrame) -> None:
+        """GraphAdapter should work with plain DataFrame."""
+        # Aggregate to node features
+        node_df = (
+            plain_aggregated_df.group_by("cell_id")
+            .agg(
+                [
+                    pl.col("event_count").sum().alias("total_events"),
+                    pl.col("centroid_lat").mean().alias("lat"),
+                    pl.col("centroid_lon").mean().alias("lon"),
+                ]
+            )
+            .sort("cell_id")
+        )
+
+        config = GraphAdapterConfig(
+            node_col="cell_id",
+            feature_cols=["total_events", "lat", "lon"],
+            adjacency_type="spatial",
+            spatial_threshold=0.1,
+            include_self_loops=True,
+        )
+        adapter = GraphAdapter(config)
+        output = adapter.convert(node_df)  # type: ignore[arg-type]
+
+        n_nodes = len(node_df)
+        assert output.node_features.shape[0] == n_nodes
+        assert output.node_features.shape[1] == 3  # 3 features
+        assert output.edge_index.shape[0] == 2  # src, dst
+        assert output.adjacency is not None
+        assert output.adjacency.shape == (n_nodes, n_nodes)
+
+    def test_stream_adapter_plain_dataframe(self, plain_crime_df: pl.DataFrame) -> None:
+        """StreamAdapter should work with plain DataFrame."""
+        config = StreamAdapterConfig(
+            timestamp_col="timestamp",
+            event_type_col="primary_type",
+            state_cols=["latitude", "longitude"],
+            time_scale="normalize",
+            time_origin="first",
+        )
+        adapter = StreamAdapter(config)
+        output = adapter.convert(plain_crime_df)  # type: ignore[arg-type]
+
+        assert output.timestamps.shape[0] == len(plain_crime_df)
+        assert output.states.shape == (len(plain_crime_df), 2)  # lat, lon
+        assert output.inter_times.shape[0] == len(plain_crime_df)
+        assert output.event_types is not None
+        assert output.event_types.shape[0] == len(plain_crime_df)
+
+    def test_adapters_with_lazyframe(self, plain_crime_df: pl.DataFrame) -> None:
+        """Adapters should also work with LazyFrame (not just DataFrame)."""
+        lf = plain_crime_df.lazy()
+
+        config = StreamAdapterConfig(
+            timestamp_col="timestamp",
+            state_cols=["latitude", "longitude"],
+        )
+        adapter = StreamAdapter(config)
+        output = adapter.convert(lf)  # type: ignore[arg-type]
+
+        # Should auto-collect and process
+        assert output.timestamps.shape[0] == len(plain_crime_df)

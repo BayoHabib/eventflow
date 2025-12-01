@@ -53,7 +53,9 @@ dmypy.json
 
 # Jupyter
 .ipynb_checkpoints/
+# Ignore notebooks except in notebooks/ directory
 *.ipynb
+!notebooks/*.ipynb
 
 # Data files
 data/

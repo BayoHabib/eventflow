@@ -161,25 +161,45 @@ class GraphAdapter(BaseModalityAdapter[GraphOutput]):
 
         # Get configuration
         node_col = self.config.node_col or "grid_id"
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+        # Check if this is an EventFrame (has EventSchema) vs plain DataFrame/LazyFrame
+        has_eventframe_schema = False
+        event_schema = None
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+
+        if not is_polars_lazy and not is_polars_dataframe:
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_eventframe_schema = hasattr(event_schema, "timestamp_col")
+
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_eventframe_schema and event_schema and event_schema.timestamp_col:
+                timestamp_col = event_schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         # Collect data
-        df = event_frame.collect()
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect()
+        else:
+            df = event_frame  # type: ignore[assignment]
 
         if node_col not in df.columns:
             raise ValueError(f"Node column '{node_col}' not found in EventFrame")
 
-        # Determine feature columns
+        # Auto-detect feature columns
         if self.config.feature_cols is not None:
             feature_cols = list(self.config.feature_cols)
         else:
             exclude = {node_col, timestamp_col}
-            if event_frame.schema.lat_col:
-                exclude.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude.add(event_frame.schema.geometry_col)
+            if has_eventframe_schema and event_schema:
+                if event_schema.lat_col:
+                    exclude.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude.add(event_schema.geometry_col)
 
             feature_cols = [
                 col
@@ -292,8 +312,22 @@ class GraphAdapter(BaseModalityAdapter[GraphOutput]):
         edge_list: list[tuple[int, int]] = []
         edge_weights: list[float] = []
 
-        lat_col = event_frame.schema.lat_col
-        lon_col = event_frame.schema.lon_col
+        # Handle both EventFrame (has EventSchema) and plain DataFrame (has Polars Schema)
+        if hasattr(event_frame, "schema") and hasattr(event_frame.schema, "lat_col"):
+            lat_col = event_frame.schema.lat_col
+            lon_col = event_frame.schema.lon_col
+        else:
+            # For plain DataFrames, try common column names or return empty edges
+            lat_col = None
+            lon_col = None
+            for lat_name in ["latitude", "lat", "Latitude", "LAT"]:
+                if lat_name in df.columns:
+                    lat_col = lat_name
+                    break
+            for lon_name in ["longitude", "lon", "lng", "Longitude", "LON", "LNG"]:
+                if lon_name in df.columns:
+                    lon_col = lon_name
+                    break
 
         if lat_col and lon_col and lat_col in df.columns and lon_col in df.columns:
             # Get node centroids

@@ -117,31 +117,62 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
 
         # Get configuration
         spatial_col = self.config.spatial_col
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+
+        # Check if this is an EventFrame (has EventSchema) vs plain DataFrame/LazyFrame
+        has_schema = False
+        event_schema = None
+        is_polars_lazy = isinstance(event_frame, pl.LazyFrame)
+        is_polars_dataframe = isinstance(event_frame, pl.DataFrame)
+
+        if not is_polars_lazy and not is_polars_dataframe:
+            if hasattr(event_frame, "schema"):
+                event_schema = event_frame.schema
+                has_schema = hasattr(event_schema, "timestamp_col")
+
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_schema and event_schema and event_schema.timestamp_col:
+                timestamp_col = event_schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         if spatial_col is None:
             # Try to infer spatial column
-            if "grid_id" in event_frame.lazy_frame.collect_schema().names():
-                spatial_col = "grid_id"
-            elif "zone_id" in event_frame.lazy_frame.collect_schema().names():
-                spatial_col = "zone_id"
+            if hasattr(event_frame, "columns"):
+                cols = event_frame.columns
+            elif hasattr(event_frame, "collect_schema"):
+                cols = event_frame.collect_schema().names()
             else:
-                raise ValueError("spatial_col must be specified or grid_id/zone_id must exist")
+                cols = []  # fallback
+            if "grid_id" in cols:
+                spatial_col = "grid_id"
+            elif "zone_id" in cols:
+                spatial_col = "zone_id"
+            elif "cell_id" in cols:
+                spatial_col = "cell_id"
+            else:
+                raise ValueError(
+                    "spatial_col must be specified or grid_id/zone_id/cell_id must exist"
+                )
 
         # Collect data
-        df = event_frame.collect()
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect()
+        else:
+            df = event_frame  # type: ignore[assignment]
 
         # Determine feature columns
         if self.config.feature_cols is not None:
             feature_cols = list(self.config.feature_cols)
         else:
             exclude = {spatial_col, timestamp_col}
-            if event_frame.schema.lat_col:
-                exclude.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude.add(event_frame.schema.geometry_col)
+            if has_schema and event_schema:
+                if event_schema.lat_col:
+                    exclude.add(event_schema.lat_col)
+                if event_schema.lon_col:
+                    exclude.add(event_schema.lon_col)
+                if event_schema.geometry_col:
+                    exclude.add(event_schema.geometry_col)
 
             feature_cols = [
                 col
