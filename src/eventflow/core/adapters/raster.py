@@ -74,7 +74,7 @@ class RasterOutput:
     def to_torch(self) -> dict[str, Any]:
         """Convert to PyTorch tensors."""
         try:
-            import torch  # type: ignore[import-not-found]
+            import torch  # type: ignore
 
             return {
                 "raster": torch.from_numpy(self.raster),

@@ -93,7 +93,7 @@ class GraphOutput:
     def to_torch_geometric(self) -> dict[str, Any]:
         """Convert to PyTorch Geometric format."""
         try:
-            import torch  # type: ignore[import-not-found]
+            import torch  # type: ignore
 
             result: dict[str, Any] = {
                 "x": torch.from_numpy(self.node_features),
@@ -108,7 +108,7 @@ class GraphOutput:
     def to_dgl(self) -> Any:
         """Convert to DGL graph format."""
         try:
-            import dgl  # type: ignore[import-not-found]
+            import dgl  # type: ignore
             import torch
 
             src = self.edge_index[0]
