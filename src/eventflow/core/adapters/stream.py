@@ -142,10 +142,14 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
         logger.info("Converting EventFrame to stream format")
 
         # Get configuration
-        has_schema = hasattr(event_frame, "schema")
+        # Check if this is an EventFrame (has schema with timestamp_col) vs plain DataFrame
+        has_eventframe_schema = (
+            hasattr(event_frame, "schema") and 
+            hasattr(event_frame.schema, "timestamp_col")
+        )
         timestamp_col = self.config.timestamp_col
         if timestamp_col is None:
-            if has_schema and event_frame.schema.timestamp_col:
+            if has_eventframe_schema and event_frame.schema.timestamp_col:
                 timestamp_col = event_frame.schema.timestamp_col
             else:
                 timestamp_col = "timestamp"
@@ -167,12 +171,13 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
             exclude = {timestamp_col}
             if self.config.event_type_col:
                 exclude.add(self.config.event_type_col)
-            if event_frame.schema.lat_col:
-                exclude.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude.add(event_frame.schema.geometry_col)
+            if has_eventframe_schema:
+                if event_frame.schema.lat_col:
+                    exclude.add(event_frame.schema.lat_col)
+                if event_frame.schema.lon_col:
+                    exclude.add(event_frame.schema.lon_col)
+                if event_frame.schema.geometry_col:
+                    exclude.add(event_frame.schema.geometry_col)
 
             state_cols = [
                 col
