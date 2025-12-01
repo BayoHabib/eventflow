@@ -133,10 +133,19 @@ class RasterAdapter(BaseModalityAdapter[RasterOutput]):
 
         # Get configuration
         grid_col = self.config.grid_col or "grid_id"
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+        has_schema = hasattr(event_frame, "schema")
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_schema and event_frame.schema.timestamp_col:
+                timestamp_col = event_frame.schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         # Collect data
-        df = event_frame.collect()
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect()
+        else:
+            df = event_frame
 
         if grid_col not in df.columns:
             raise ValueError(f"Grid column '{grid_col}' not found in EventFrame")

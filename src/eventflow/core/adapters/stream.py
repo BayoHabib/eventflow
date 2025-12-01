@@ -142,10 +142,19 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
         logger.info("Converting EventFrame to stream format")
 
         # Get configuration
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+        has_schema = hasattr(event_frame, "schema")
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_schema and event_frame.schema.timestamp_col:
+                timestamp_col = event_frame.schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         # Collect data and sort by timestamp
-        df = event_frame.collect().sort(timestamp_col)
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect().sort(timestamp_col)
+        else:
+            df = event_frame.sort(timestamp_col)
 
         # Truncate if max_events specified
         if self.config.max_events is not None:

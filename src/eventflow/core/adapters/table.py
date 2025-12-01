@@ -122,8 +122,11 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
         """
         logger.info("Converting EventFrame to table format")
 
-        # Collect the lazy frame
-        df = event_frame.collect()
+        # Collect the lazy frame if needed
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect()
+        else:
+            df = event_frame
 
         # Determine feature columns
         if self.config.feature_cols is not None:

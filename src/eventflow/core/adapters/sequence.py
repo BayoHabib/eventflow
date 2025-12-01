@@ -117,31 +117,44 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
 
         # Get configuration
         spatial_col = self.config.spatial_col
-        timestamp_col = self.config.timestamp_col or event_frame.schema.timestamp_col
+        has_schema = hasattr(event_frame, "schema")
+        timestamp_col = self.config.timestamp_col
+        if timestamp_col is None:
+            if has_schema and event_frame.schema.timestamp_col:
+                timestamp_col = event_frame.schema.timestamp_col
+            else:
+                timestamp_col = "timestamp"
 
         if spatial_col is None:
             # Try to infer spatial column
-            if "grid_id" in event_frame.lazy_frame.collect_schema().names():
+            cols = event_frame.columns if hasattr(event_frame, "columns") else event_frame.collect_schema().names()
+            if "grid_id" in cols:
                 spatial_col = "grid_id"
-            elif "zone_id" in event_frame.lazy_frame.collect_schema().names():
+            elif "zone_id" in cols:
                 spatial_col = "zone_id"
+            elif "cell_id" in cols:
+                spatial_col = "cell_id"
             else:
-                raise ValueError("spatial_col must be specified or grid_id/zone_id must exist")
+                raise ValueError("spatial_col must be specified or grid_id/zone_id/cell_id must exist")
 
         # Collect data
-        df = event_frame.collect()
+        if hasattr(event_frame, "collect"):
+            df = event_frame.collect()
+        else:
+            df = event_frame
 
         # Determine feature columns
         if self.config.feature_cols is not None:
             feature_cols = list(self.config.feature_cols)
         else:
             exclude = {spatial_col, timestamp_col}
-            if event_frame.schema.lat_col:
-                exclude.add(event_frame.schema.lat_col)
-            if event_frame.schema.lon_col:
-                exclude.add(event_frame.schema.lon_col)
-            if event_frame.schema.geometry_col:
-                exclude.add(event_frame.schema.geometry_col)
+            if has_schema:
+                if event_frame.schema.lat_col:
+                    exclude.add(event_frame.schema.lat_col)
+                if event_frame.schema.lon_col:
+                    exclude.add(event_frame.schema.lon_col)
+                if event_frame.schema.geometry_col:
+                    exclude.add(event_frame.schema.geometry_col)
 
             feature_cols = [
                 col
