@@ -11,9 +11,7 @@ This module provides validation checks for:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
-
-import polars as pl
+from typing import TYPE_CHECKING, Any, cast
 
 from eventflow.core.utils import get_logger
 
@@ -43,10 +41,7 @@ class ValidationReport:
     @property
     def is_valid(self) -> bool:
         """Check if all validations passed (no errors)."""
-        return all(
-            r.is_valid or r.severity != "error"
-            for r in self.results
-        )
+        return all(r.is_valid or r.severity != "error" for r in self.results)
 
     @property
     def errors(self) -> list[ValidationResult]:
@@ -132,12 +127,12 @@ def validate_intensity_positivity(
     is_valid = n_negative == 0
 
     return ValidationResult(
-        is_valid=is_valid,
+        is_valid=bool(is_valid),
         check_name="intensity_positivity",
         message=(
             "All intensity values are positive"
             if is_valid
-            else f"Found {n_negative} non-positive intensity values (min={min_val})"
+            else f"Found {n_negative} non-positive intensity values (min={min_val!r})"
         ),
         details={
             "n_negative": n_negative,
@@ -168,9 +163,7 @@ def validate_intensity_integrability(
     Returns:
         ValidationResult indicating pass/fail
     """
-    df = event_frame.lazy_frame.sort(
-        time_col or event_frame.schema.timestamp_col
-    ).collect()
+    df = event_frame.lazy_frame.sort(time_col or event_frame.schema.timestamp_col).collect()
 
     if intensity_col not in df.columns:
         return ValidationResult(
@@ -191,9 +184,7 @@ def validate_intensity_integrability(
         avg_intensity = (intensities[i] + intensities[i - 1]) / 2
         total_integral += dt * avg_intensity
 
-    is_valid = total_integral < max_integral and not (
-        total_integral != total_integral  # NaN check
-    )
+    is_valid = total_integral < max_integral and not (total_integral != total_integral)  # NaN check
 
     return ValidationResult(
         is_valid=is_valid,
@@ -251,12 +242,12 @@ def validate_probability_bounds(
     is_valid = n_below == 0 and n_above == 0
 
     return ValidationResult(
-        is_valid=is_valid,
+        is_valid=bool(is_valid),
         check_name="probability_bounds",
         message=(
             "All probabilities are in [0, 1]"
             if is_valid
-            else f"Found {n_below + n_above} values outside [0, 1] (range: [{min_val}, {max_val}])"
+            else f"Found {n_below + n_above} values outside [0, 1] (range: [{min_val!r}, {max_val!r}])"
         ),
         details={
             "min_value": min_val,
@@ -285,9 +276,7 @@ def validate_survival_monotonicity(
     Returns:
         ValidationResult indicating pass/fail
     """
-    df = event_frame.lazy_frame.sort(
-        event_frame.schema.timestamp_col
-    ).collect()
+    df = event_frame.lazy_frame.sort(event_frame.schema.timestamp_col).collect()
 
     if survival_col not in df.columns:
         return ValidationResult(
@@ -370,9 +359,7 @@ def validate_cumulative_hazard_start(
     Returns:
         ValidationResult indicating pass/fail
     """
-    df = event_frame.lazy_frame.sort(
-        event_frame.schema.timestamp_col
-    ).collect()
+    df = event_frame.lazy_frame.sort(event_frame.schema.timestamp_col).collect()
 
     if cumulative_hazard_col not in df.columns:
         return ValidationResult(
@@ -419,9 +406,7 @@ def validate_survival_boundaries(
     Returns:
         ValidationResult indicating pass/fail
     """
-    df = event_frame.lazy_frame.sort(
-        event_frame.schema.timestamp_col
-    ).collect()
+    df = event_frame.lazy_frame.sort(event_frame.schema.timestamp_col).collect()
 
     if survival_col not in df.columns:
         return ValidationResult(
@@ -549,9 +534,11 @@ def validate_hawkes_intensity(
     background = df[background_col]
 
     # Check intensity >= background
-    violations = (intensity < background).sum()
-    min_intensity = intensity.min()
-    min_background = background.min()
+    violations = int((intensity < background).sum())
+    _min_intensity = intensity.min()
+    _min_background = background.min()
+    min_intensity = cast(float, _min_intensity) if _min_intensity is not None else 0.0
+    min_background = cast(float, _min_background) if _min_background is not None else 0.0
 
     is_valid = violations == 0 and min_intensity >= 0
 
@@ -620,12 +607,12 @@ def validate_inter_event_positivity(
     is_valid = n_negative == 0
 
     return ValidationResult(
-        is_valid=is_valid,
+        is_valid=bool(is_valid),
         check_name="inter_event_positivity",
         message=(
             "All inter-event times are positive"
             if is_valid
-            else f"Found {n_negative} non-positive inter-event times (min={min_val})"
+            else f"Found {n_negative} non-positive inter-event times (min={min_val!r})"
         ),
         details={
             "n_negative": n_negative,

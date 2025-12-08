@@ -123,9 +123,7 @@ class StreamingWindowConfig(BaseModel):
     window_duration: str | None = Field(
         default=None, description="Maximum time span (e.g., '1h', '6h')"
     )
-    emit_on_expire: bool = Field(
-        default=False, description="Emit features when events expire"
-    )
+    emit_on_expire: bool = Field(default=False, description="Emit features when events expire")
 
 
 class OnlineStatisticsConfig(BaseModel):
@@ -148,18 +146,14 @@ class StreamingHawkesConfig(BaseModel):
     beta: float = Field(default=1.0, gt=0, description="Decay rate")
     mu: float = Field(default=0.1, gt=0, description="Background intensity")
     time_unit: str = Field(default="1h", description="Time unit")
-    update_threshold: float = Field(
-        default=0.001, description="Minimum intensity change to update"
-    )
+    update_threshold: float = Field(default=0.001, description="Minimum intensity change to update")
 
 
 class EventBufferConfig(BaseModel):
     """Configuration for event buffer step."""
 
     buffer_size: int = Field(default=1000, ge=1, description="Maximum buffer size")
-    flush_interval: str | None = Field(
-        default=None, description="Time interval to flush buffer"
-    )
+    flush_interval: str | None = Field(default=None, description="Time interval to flush buffer")
     flush_on_full: bool = Field(default=True, description="Flush when buffer is full")
 
 
@@ -205,9 +199,7 @@ class StreamingStep(Step, ABC):
         # Add computed features as new columns
         if results:
             for col_name in results[0]:
-                df = df.with_columns(
-                    pl.Series(col_name, [r.get(col_name) for r in results])
-                )
+                df = df.with_columns(pl.Series(col_name, [r.get(col_name) for r in results]))
 
         return event_frame.with_lazy_frame(df.lazy())
 
@@ -429,8 +421,9 @@ class StreamingHawkesStep(StreamingStep):
         # Decay existing trigger contributions
         if state["last_timestamp"] is not None:
             dt = (current_ts - state["last_timestamp"]).total_seconds()
-            decay = (-self._beta_per_second * dt)
+            decay = -self._beta_per_second * dt
             import math
+
             state["trigger_sum"] *= math.exp(decay)
 
         # Add new trigger from this event
@@ -569,14 +562,9 @@ class StreamingDecayStep(StreamingStep):
 
     def initialize_state(self) -> dict[str, dict[str, Any]]:
         """Initialize decay state."""
-        return {
-            col: {"decayed_sum": 0.0, "last_timestamp": None}
-            for col in self.value_cols
-        }
+        return {col: {"decayed_sum": 0.0, "last_timestamp": None} for col in self.value_cols}
 
-    def process_event(
-        self, event: StreamEvent, state: dict[str, dict[str, Any]]
-    ) -> dict[str, Any]:
+    def process_event(self, event: StreamEvent, state: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Update decayed sums."""
         import math
 
@@ -671,8 +659,7 @@ class StreamingInterEventStep(StreamingStep):
                 state["ema_inter_event"] = inter_event
             else:
                 state["ema_inter_event"] = (
-                    self.ema_alpha * inter_event
-                    + (1 - self.ema_alpha) * state["ema_inter_event"]
+                    self.ema_alpha * inter_event + (1 - self.ema_alpha) * state["ema_inter_event"]
                 )
 
         state["last_timestamp"] = event.timestamp
@@ -680,9 +667,7 @@ class StreamingInterEventStep(StreamingStep):
         # Compute event rate
         total_time = (event.timestamp - state["first_timestamp"]).total_seconds()
         event_rate = (
-            state["event_count"] / (total_time / self._unit_seconds)
-            if total_time > 0
-            else 0.0
+            state["event_count"] / (total_time / self._unit_seconds) if total_time > 0 else 0.0
         )
 
         return {

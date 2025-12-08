@@ -41,9 +41,7 @@ class ExponentialDecayConfig(BaseModel):
     decay_rate: float = Field(default=0.1, gt=0, description="Decay rate (lambda)")
     time_unit: str = Field(default="1h", description="Time unit for decay computation")
     output_col: str = Field(default="decay_weight", description="Output column name")
-    group_cols: list[str] = Field(
-        default_factory=list, description="Optional columns to group by"
-    )
+    group_cols: list[str] = Field(default_factory=list, description="Optional columns to group by")
 
 
 class HawkesKernelConfig(BaseModel):
@@ -101,9 +99,7 @@ class HazardRateConfig(BaseModel):
     )
     bandwidth: float = Field(default=1.0, gt=0, description="Kernel bandwidth for smoothing")
     n_intervals: int = Field(default=10, ge=2, description="Number of intervals for piecewise")
-    group_cols: list[str] = Field(
-        default_factory=list, description="Columns to stratify hazard by"
-    )
+    group_cols: list[str] = Field(default_factory=list, description="Columns to stratify hazard by")
 
 
 class SurvivalTableConfig(BaseModel):
@@ -138,9 +134,7 @@ class DurationFeaturesConfig(BaseModel):
     include_time_to_next: bool = Field(
         default=True, description="Include time to next event (requires future info)"
     )
-    group_cols: list[str] = Field(
-        default_factory=list, description="Columns to group by"
-    )
+    group_cols: list[str] = Field(default_factory=list, description="Columns to group by")
 
 
 class ContinuousInterEventConfig(BaseModel):
@@ -158,9 +152,7 @@ class ContinuousInterEventConfig(BaseModel):
     include_coefficient_variation: bool = Field(
         default=True, description="Include coefficient of variation"
     )
-    group_cols: list[str] = Field(
-        default_factory=list, description="Columns to group by"
-    )
+    group_cols: list[str] = Field(default_factory=list, description="Columns to group by")
 
 
 # -----------------------------------------------------------------------------
@@ -200,9 +192,7 @@ class ExponentialDecayStep(Step):
         unit_seconds = _parse_time_unit_seconds(self.time_unit)
         decay_per_second = self.decay_rate / unit_seconds
 
-        logger.info(
-            f"Computing exponential decay with rate={self.decay_rate}/{self.time_unit}"
-        )
+        logger.info(f"Computing exponential decay with rate={self.decay_rate}/{self.time_unit}")
 
         # Sort by timestamp
         sort_cols = self.group_cols + [timestamp_col] if self.group_cols else [timestamp_col]
@@ -210,14 +200,9 @@ class ExponentialDecayStep(Step):
 
         if self.group_cols:
             # Compute decay relative to max time within each group
+            lf = lf.with_columns(pl.col(timestamp_col).max().over(self.group_cols).alias("_max_ts"))
             lf = lf.with_columns(
-                pl.col(timestamp_col).max().over(self.group_cols).alias("_max_ts")
-            )
-            lf = lf.with_columns(
-                (
-                    -decay_per_second
-                    * (pl.col("_max_ts") - pl.col(timestamp_col)).dt.total_seconds()
-                )
+                (-decay_per_second * (pl.col("_max_ts") - pl.col(timestamp_col)).dt.total_seconds())
                 .exp()
                 .alias(self.output_col)
             )
@@ -225,10 +210,7 @@ class ExponentialDecayStep(Step):
         else:
             max_ts = lf.select(pl.col(timestamp_col).max()).collect().item()
             lf = lf.with_columns(
-                (
-                    -decay_per_second
-                    * (pl.lit(max_ts) - pl.col(timestamp_col)).dt.total_seconds()
-                )
+                (-decay_per_second * (pl.lit(max_ts) - pl.col(timestamp_col)).dt.total_seconds())
                 .exp()
                 .alias(self.output_col)
             )
@@ -296,9 +278,7 @@ class HawkesKernelStep(Step):
         unit_seconds = _parse_time_unit_seconds(self.time_unit)
         beta_per_second = self.beta / unit_seconds
 
-        logger.info(
-            f"Computing Hawkes kernel: α={self.alpha}, β={self.beta}, μ={self.mu}"
-        )
+        logger.info(f"Computing Hawkes kernel: α={self.alpha}, β={self.beta}, μ={self.mu}")
 
         # Sort and collect for kernel computation (requires sequential access)
         sort_cols = self.group_cols + [timestamp_col] if self.group_cols else [timestamp_col]
@@ -425,16 +405,12 @@ class ConditionalIntensityStep(Step):
 
             intensities.append(intensity)
 
-        result_df = df.with_columns(
-            pl.Series("conditional_intensity", intensities)
-        )
+        result_df = df.with_columns(pl.Series("conditional_intensity", intensities))
 
         if self.normalize:
             max_intensity = max(intensities) if intensities else 1.0
             normalized = [i / max_intensity for i in intensities]
-            result_df = result_df.with_columns(
-                pl.Series("intensity_normalized", normalized)
-            )
+            result_df = result_df.with_columns(pl.Series("intensity_normalized", normalized))
 
         result = event_frame.with_lazy_frame(result_df.lazy())
 
@@ -513,9 +489,7 @@ class PairCorrelationStep(Step):
                         min_dist = dist
             nearest_distances.append(min_dist if min_dist != float("inf") else 0.0)
 
-        result_df = df.with_columns(
-            pl.Series("nearest_neighbor_distance", nearest_distances)
-        )
+        result_df = df.with_columns(pl.Series("nearest_neighbor_distance", nearest_distances))
 
         result = event_frame.with_lazy_frame(result_df.lazy())
 
@@ -577,7 +551,6 @@ class KFunctionStep(Step):
         n_events = len(lats)
 
         # Compute local K-function contribution (count of neighbors within radius)
-        bin_width = self.max_distance / self.n_bins
         local_k = []
 
         for i in range(n_events):
@@ -595,12 +568,11 @@ class KFunctionStep(Step):
             output_col = "l_function_local"
         elif self.transform == "H":
             local_values = [
-                math.sqrt(k / math.pi) - self.max_distance / 2 if k > 0 else 0
-                for k in local_k
+                math.sqrt(k / math.pi) - self.max_distance / 2 if k > 0 else 0.0 for k in local_k
             ]
             output_col = "h_function_local"
         else:
-            local_values = local_k
+            local_values = [float(k) for k in local_k]
             output_col = "k_function_local"
 
         result_df = df.with_columns(pl.Series(output_col, local_values))
@@ -905,8 +877,9 @@ class DurationFeaturesStep(Step):
                 for exp in self.power_exponents:
                     col_name = f"time_since_last_pow_{exp}"
                     lf = lf.with_columns(
-                        (1.0 / (1.0 + pl.col("time_since_last").fill_null(0) / 3600) ** exp)
-                        .alias(col_name)
+                        (1.0 / (1.0 + pl.col("time_since_last").fill_null(0) / 3600) ** exp).alias(
+                            col_name
+                        )
                     )
                     result = result.register_feature(
                         col_name,
@@ -939,8 +912,9 @@ class DurationFeaturesStep(Step):
 
             elif decay_func == "logarithmic":
                 lf = lf.with_columns(
-                    (1.0 / (1.0 + (pl.col("time_since_last").fill_null(0) / 3600 + 1).log()))
-                    .alias("time_since_last_log")
+                    (1.0 / (1.0 + (pl.col("time_since_last").fill_null(0) / 3600 + 1).log())).alias(
+                        "time_since_last_log"
+                    )
                 )
                 result = result.register_feature(
                     "time_since_last_log",
@@ -1188,9 +1162,9 @@ def _parse_time_unit_seconds(time_unit: str) -> float:
 def _timedelta_to_seconds(td: Any) -> float:
     """Convert timedelta (numpy or Python) to seconds."""
     if isinstance(td, np.timedelta64):
-        return float(td / np.timedelta64(1, 's'))
-    elif hasattr(td, 'total_seconds'):
-        return td.total_seconds()
+        return float(td / np.timedelta64(1, "s"))
+    elif hasattr(td, "total_seconds"):
+        return float(td.total_seconds())
     else:
         return float(td)
 

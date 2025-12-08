@@ -221,9 +221,11 @@ class TestPipelineWithPointProcessSteps:
 
     def test_pipeline_with_hawkes(self, sample_event_frame: EventFrame) -> None:
         """Test pipeline with Hawkes step."""
-        pipeline = Pipeline([
-            HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
-        ])
+        pipeline = Pipeline(
+            [
+                HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
+            ]
+        )
 
         result = pipeline.run(sample_event_frame)
         df = result.collect()
@@ -234,11 +236,13 @@ class TestPipelineWithPointProcessSteps:
 
     def test_pipeline_with_streaming_steps(self, sample_event_frame: EventFrame) -> None:
         """Test pipeline with streaming steps."""
-        pipeline = Pipeline([
-            StreamingWindowStep(window_size=10),
-            StreamingHawkesStep(alpha=0.3, beta=1.0, mu=0.1),
-            OnlineStatisticsStep(value_cols=["value"], statistics=["mean"]),
-        ])
+        pipeline = Pipeline(
+            [
+                StreamingWindowStep(window_size=10),
+                StreamingHawkesStep(alpha=0.3, beta=1.0, mu=0.1),
+                OnlineStatisticsStep(value_cols=["value"], statistics=["mean"]),
+            ]
+        )
 
         result = pipeline.run(sample_event_frame)
         df = result.collect()
@@ -249,12 +253,14 @@ class TestPipelineWithPointProcessSteps:
 
     def test_mixed_pipeline(self, sample_event_frame: EventFrame) -> None:
         """Test pipeline with both batch and streaming steps."""
-        pipeline = Pipeline([
-            ExtractTemporalComponentsStep(["hour_of_day", "day_of_week"]),
-            HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
-            StreamingWindowStep(window_size=10),
-            StreamingInterEventStep(),
-        ])
+        pipeline = Pipeline(
+            [
+                ExtractTemporalComponentsStep(["hour_of_day", "day_of_week"]),
+                HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
+                StreamingWindowStep(window_size=10),
+                StreamingInterEventStep(),
+            ]
+        )
 
         result = pipeline.run(sample_event_frame)
         df = result.collect()
@@ -267,9 +273,11 @@ class TestPipelineWithPointProcessSteps:
 
     def test_pipeline_preserves_original_columns(self, sample_event_frame: EventFrame) -> None:
         """Test that pipeline preserves original columns."""
-        pipeline = Pipeline([
-            HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
-        ])
+        pipeline = Pipeline(
+            [
+                HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1),
+            ]
+        )
 
         result = pipeline.run(sample_event_frame)
         df = result.collect()
@@ -287,15 +295,19 @@ class TestPipelineEdgeCases:
 
     def test_empty_event_frame(self) -> None:
         """Test pipeline with empty EventFrame."""
-        lf = pl.LazyFrame({
-            "timestamp": [],
-            "latitude": [],
-            "longitude": [],
-        }).with_columns([
-            pl.col("timestamp").cast(pl.Datetime),
-            pl.col("latitude").cast(pl.Float64),
-            pl.col("longitude").cast(pl.Float64),
-        ])
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [],
+                "latitude": [],
+                "longitude": [],
+            }
+        ).with_columns(
+            [
+                pl.col("timestamp").cast(pl.Datetime),
+                pl.col("latitude").cast(pl.Float64),
+                pl.col("longitude").cast(pl.Float64),
+            ]
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -304,9 +316,11 @@ class TestPipelineEdgeCases:
         metadata = EventMetadata(dataset_name="empty", crs="EPSG:4326")
         ef = EventFrame(lf, schema, metadata)
 
-        pipeline = Pipeline([
-            StreamingWindowStep(window_size=5),
-        ])
+        pipeline = Pipeline(
+            [
+                StreamingWindowStep(window_size=5),
+            ]
+        )
 
         result = pipeline.run(ef)
         df = result.collect()
@@ -314,11 +328,13 @@ class TestPipelineEdgeCases:
 
     def test_single_event(self) -> None:
         """Test pipeline with single event."""
-        lf = pl.LazyFrame({
-            "timestamp": [datetime(2024, 1, 1)],
-            "latitude": [41.8781],
-            "longitude": [-87.6298],
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1)],
+                "latitude": [41.8781],
+                "longitude": [-87.6298],
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -327,10 +343,12 @@ class TestPipelineEdgeCases:
         metadata = EventMetadata(dataset_name="single", crs="EPSG:4326")
         ef = EventFrame(lf, schema, metadata)
 
-        pipeline = Pipeline([
-            StreamingWindowStep(window_size=5),
-            StreamingInterEventStep(),
-        ])
+        pipeline = Pipeline(
+            [
+                StreamingWindowStep(window_size=5),
+                StreamingInterEventStep(),
+            ]
+        )
 
         result = pipeline.run(ef)
         df = result.collect()

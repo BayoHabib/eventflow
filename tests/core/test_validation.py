@@ -41,7 +41,18 @@ def sample_event_frame() -> EventFrame:
             "survival": [1.0, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55],
             "hazard": [0.05, 0.05, 0.06, 0.06, 0.07, 0.07, 0.08, 0.08, 0.09, 0.09],
             "probability": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95],
-            "inter_event": [None, 3600.0, 3600.0, 3600.0, 3600.0, 3600.0, 3600.0, 3600.0, 3600.0, 3600.0],
+            "inter_event": [
+                None,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+                3600.0,
+            ],
         }
     )
 
@@ -77,7 +88,12 @@ def invalid_event_frame() -> EventFrame:
         timestamp_col="timestamp",
         lat_col="latitude",
         lon_col="longitude",
-        numeric_cols=["negative_intensity", "invalid_survival", "invalid_probability", "negative_hazard"],
+        numeric_cols=[
+            "negative_intensity",
+            "invalid_survival",
+            "invalid_probability",
+            "negative_hazard",
+        ],
     )
     metadata = EventMetadata(dataset_name="test-invalid", crs="EPSG:4326")
     return EventFrame(lf, schema, metadata)
@@ -164,7 +180,9 @@ class TestValidateIntensityPositivity:
 
     def test_invalid_negative_intensity(self, invalid_event_frame: EventFrame) -> None:
         """Test detection of negative intensity values."""
-        result = validate_intensity_positivity(invalid_event_frame, intensity_col="negative_intensity")
+        result = validate_intensity_positivity(
+            invalid_event_frame, intensity_col="negative_intensity"
+        )
         assert result.is_valid is False
         assert result.details.get("n_negative", 0) > 0 or "non-positive" in result.message.lower()
 
@@ -195,7 +213,9 @@ class TestValidateProbabilityBounds:
 
     def test_invalid_probability_bounds(self, invalid_event_frame: EventFrame) -> None:
         """Test detection of out-of-bounds probabilities."""
-        result = validate_probability_bounds(invalid_event_frame, probability_col="invalid_probability")
+        result = validate_probability_bounds(
+            invalid_event_frame, probability_col="invalid_probability"
+        )
         assert result.is_valid is False
 
 
@@ -209,7 +229,9 @@ class TestValidateSurvivalMonotonicity:
 
     def test_invalid_non_monotonic_survival(self, invalid_event_frame: EventFrame) -> None:
         """Test detection of non-monotonic survival."""
-        result = validate_survival_monotonicity(invalid_event_frame, survival_col="invalid_survival")
+        result = validate_survival_monotonicity(
+            invalid_event_frame, survival_col="invalid_survival"
+        )
         assert result.is_valid is False
 
 
@@ -260,13 +282,15 @@ class TestValidateHawkesIntensity:
 
     def test_valid_hawkes_intensity(self) -> None:
         """Test validation of valid Hawkes intensity."""
-        lf = pl.LazyFrame({
-            "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
-            "latitude": [41.8781] * 5,
-            "longitude": [-87.6298] * 5,
-            "hawkes_intensity": [0.5, 0.6, 0.55, 0.7, 0.65],
-            "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
+                "latitude": [41.8781] * 5,
+                "longitude": [-87.6298] * 5,
+                "hawkes_intensity": [0.5, 0.6, 0.55, 0.7, 0.65],
+                "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -284,13 +308,15 @@ class TestValidateHawkesIntensity:
 
     def test_invalid_intensity_below_background(self) -> None:
         """Test detection of intensity below background."""
-        lf = pl.LazyFrame({
-            "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
-            "latitude": [41.8781] * 5,
-            "longitude": [-87.6298] * 5,
-            "hawkes_intensity": [0.05, 0.6, 0.55, 0.7, 0.65],  # First one below background
-            "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
+                "latitude": [41.8781] * 5,
+                "longitude": [-87.6298] * 5,
+                "hawkes_intensity": [0.05, 0.6, 0.55, 0.7, 0.65],  # First one below background
+                "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -336,15 +362,17 @@ class TestValidateTemporalOrdering:
 
     def test_invalid_ordering(self) -> None:
         """Test detection of out-of-order events."""
-        lf = pl.LazyFrame({
-            "timestamp": [
-                datetime(2024, 1, 1, 3),
-                datetime(2024, 1, 1, 1),  # Out of order
-                datetime(2024, 1, 1, 2),
-            ],
-            "latitude": [41.8781] * 3,
-            "longitude": [-87.6298] * 3,
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [
+                    datetime(2024, 1, 1, 3),
+                    datetime(2024, 1, 1, 1),  # Out of order
+                    datetime(2024, 1, 1, 2),
+                ],
+                "latitude": [41.8781] * 3,
+                "longitude": [-87.6298] * 3,
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -425,14 +453,16 @@ class TestValidateHawkesFeatures:
 
     def test_validates_hawkes_output(self) -> None:
         """Test comprehensive Hawkes validation."""
-        lf = pl.LazyFrame({
-            "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
-            "latitude": [41.8781] * 5,
-            "longitude": [-87.6298] * 5,
-            "hawkes_intensity": [0.15, 0.25, 0.20, 0.30, 0.28],
-            "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
-            "hawkes_trigger": [0.05, 0.15, 0.10, 0.20, 0.18],
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1, i) for i in range(5)],
+                "latitude": [41.8781] * 5,
+                "longitude": [-87.6298] * 5,
+                "hawkes_intensity": [0.15, 0.25, 0.20, 0.30, 0.28],
+                "hawkes_background": [0.1, 0.1, 0.1, 0.1, 0.1],
+                "hawkes_trigger": [0.05, 0.15, 0.10, 0.20, 0.18],
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",
@@ -454,12 +484,14 @@ class TestValidateHawkesFeatures:
 
     def test_includes_stability_check(self) -> None:
         """Test that stability check is included."""
-        lf = pl.LazyFrame({
-            "timestamp": [datetime(2024, 1, 1)],
-            "latitude": [41.8781],
-            "longitude": [-87.6298],
-            "hawkes_intensity": [0.5],
-        })
+        lf = pl.LazyFrame(
+            {
+                "timestamp": [datetime(2024, 1, 1)],
+                "latitude": [41.8781],
+                "longitude": [-87.6298],
+                "hawkes_intensity": [0.5],
+            }
+        )
         schema = EventSchema(
             timestamp_col="timestamp",
             lat_col="latitude",

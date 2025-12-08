@@ -280,10 +280,7 @@ class StreamPipeline:
         self.maintain_state = maintain_state
         self._state: dict[str, Any] = {}
         self._processed_count = 0
-        logger.info(
-            f"Created StreamPipeline with {len(steps)} steps, "
-            f"batch_size={batch_size}"
-        )
+        logger.info(f"Created StreamPipeline with {len(steps)} steps, " f"batch_size={batch_size}")
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """
@@ -319,9 +316,7 @@ class StreamPipeline:
 
             self._processed_count += 1
 
-        logger.info(
-            f"Stream pipeline completed, processed {current.count()} events"
-        )
+        logger.info(f"Stream pipeline completed, processed {current.count()} events")
         return current
 
     def run_incremental(
@@ -337,7 +332,6 @@ class StreamPipeline:
         Yields:
             EventFrame for each processed batch
         """
-        import polars as pl
 
         timestamp_col = event_frame.schema.timestamp_col
         df = event_frame.lazy_frame.sort(timestamp_col).collect()
@@ -491,10 +485,7 @@ class BranchingPipeline:
 
         for step in steps:
             # Check if step is a streaming step
-            is_streaming = (
-                hasattr(step, "initialize_state")
-                and hasattr(step, "process_event")
-            )
+            is_streaming = hasattr(step, "initialize_state") and hasattr(step, "process_event")
 
             if stream_step_types:
                 is_streaming = is_streaming or isinstance(step, stream_step_types)
@@ -509,6 +500,5 @@ class BranchingPipeline:
     def __repr__(self) -> str:
         """String representation."""
         return (
-            f"BranchingPipeline(batch={len(self.batch_steps)}, "
-            f"stream={len(self.stream_steps)})"
+            f"BranchingPipeline(batch={len(self.batch_steps)}, " f"stream={len(self.stream_steps)})"
         )

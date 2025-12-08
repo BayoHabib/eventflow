@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -11,8 +10,8 @@ import pytest
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.schema import EventMetadata, EventSchema
 from eventflow.core.steps.point_process import (
-    ContinuousInterEventStep,
     ConditionalIntensityStep,
+    ContinuousInterEventStep,
     DurationFeaturesStep,
     ExponentialDecayStep,
     HawkesKernelStep,
@@ -357,7 +356,9 @@ class TestSurvivalTableStep:
         result = step.run(sample_event_frame)
 
         df = result.collect()
-        non_null = df.drop_nulls(subset=["survival_probability", "survival_lower", "survival_upper"])
+        non_null = df.drop_nulls(
+            subset=["survival_probability", "survival_lower", "survival_upper"]
+        )
         for row in non_null.iter_rows(named=True):
             if row["survival_lower"] is not None:
                 assert row["survival_lower"] <= row["survival_probability"]
