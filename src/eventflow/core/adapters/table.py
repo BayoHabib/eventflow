@@ -19,7 +19,7 @@ from eventflow.core.adapters.configs import TableAdapterConfig
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
-    import pandas as pd
+    import pandas as pd  # type: ignore[import-untyped]
 
     from eventflow.core.event_frame import EventFrame
 
