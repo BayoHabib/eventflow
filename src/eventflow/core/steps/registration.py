@@ -13,6 +13,26 @@ from eventflow.core.steps.context import (
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,
 )
+from eventflow.core.steps.point_process import (
+    ConditionalIntensityConfig,
+    ConditionalIntensityStep,
+    ContinuousInterEventConfig,
+    ContinuousInterEventStep,
+    DurationFeaturesConfig,
+    DurationFeaturesStep,
+    ExponentialDecayConfig,
+    ExponentialDecayStep,
+    HawkesKernelConfig,
+    HawkesKernelStep,
+    HazardRateConfig,
+    HazardRateStep,
+    KFunctionConfig,
+    KFunctionStep,
+    PairCorrelationConfig,
+    PairCorrelationStep,
+    SurvivalTableConfig,
+    SurvivalTableStep,
+)
 from eventflow.core.steps.spatial import (
     AssignToGridConfig,
     AssignToGridStep,
@@ -32,6 +52,18 @@ from eventflow.core.steps.spatial import (
     SpatialLagStep,
     TransformCRSConfig,
     TransformCRSStep,
+)
+from eventflow.core.steps.streaming import (
+    EventBufferConfig,
+    EventBufferStep,
+    OnlineStatisticsConfig,
+    OnlineStatisticsStep,
+    StreamingDecayStep,
+    StreamingHawkesConfig,
+    StreamingHawkesStep,
+    StreamingInterEventStep,
+    StreamingWindowConfig,
+    StreamingWindowStep,
 )
 from eventflow.core.steps.temporal import (
     CalendarEncodingConfig,
@@ -216,6 +248,126 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         ContextAggregationStep,
         tags=["context"],
         description="Aggregate context data before joining to events",
+    )
+
+    # Point-process steps
+    registry.register(
+        "exponential_decay",
+        ExponentialDecayStep,
+        tags=["continuous"],
+        description="Apply exponential decay weighting based on time",
+        config_model=ExponentialDecayConfig,
+    )
+
+    registry.register(
+        "hawkes_kernel",
+        HawkesKernelStep,
+        tags=["continuous"],
+        description="Compute Hawkes process triggering kernel contributions",
+        config_model=HawkesKernelConfig,
+    )
+
+    registry.register(
+        "conditional_intensity",
+        ConditionalIntensityStep,
+        tags=["continuous"],
+        description="Estimate conditional intensity function at event times",
+        config_model=ConditionalIntensityConfig,
+    )
+
+    registry.register(
+        "pair_correlation",
+        PairCorrelationStep,
+        tags=["spatial", "continuous"],
+        description="Compute pair-correlation function (g-function)",
+        config_model=PairCorrelationConfig,
+    )
+
+    registry.register(
+        "k_function",
+        KFunctionStep,
+        tags=["spatial", "continuous"],
+        description="Compute Ripley's K-function for spatial analysis",
+        config_model=KFunctionConfig,
+    )
+
+    registry.register(
+        "hazard_rate",
+        HazardRateStep,
+        tags=["continuous"],
+        description="Estimate hazard rate for event occurrence",
+        config_model=HazardRateConfig,
+    )
+
+    registry.register(
+        "survival_table",
+        SurvivalTableStep,
+        tags=["continuous"],
+        description="Generate survival table with Kaplan-Meier estimates",
+        config_model=SurvivalTableConfig,
+    )
+
+    registry.register(
+        "duration_features",
+        DurationFeaturesStep,
+        tags=["continuous", "temporal"],
+        description="Build duration-based features with decay functions",
+        config_model=DurationFeaturesConfig,
+    )
+
+    registry.register(
+        "continuous_inter_event",
+        ContinuousInterEventStep,
+        tags=["continuous", "temporal"],
+        description="Compute continuous inter-event time features",
+        config_model=ContinuousInterEventConfig,
+    )
+
+    # Streaming steps
+    registry.register(
+        "streaming_window",
+        StreamingWindowStep,
+        tags=["continuous"],
+        description="Maintain sliding window over event stream",
+        config_model=StreamingWindowConfig,
+    )
+
+    registry.register(
+        "online_statistics",
+        OnlineStatisticsStep,
+        tags=["continuous"],
+        description="Compute online/streaming statistics using Welford's algorithm",
+        config_model=OnlineStatisticsConfig,
+    )
+
+    registry.register(
+        "streaming_hawkes",
+        StreamingHawkesStep,
+        tags=["continuous"],
+        description="Compute Hawkes intensity in streaming fashion",
+        config_model=StreamingHawkesConfig,
+    )
+
+    registry.register(
+        "event_buffer",
+        EventBufferStep,
+        tags=["continuous"],
+        description="Buffer events for batch processing",
+        config_model=EventBufferConfig,
+    )
+
+    registry.register(
+        "streaming_decay",
+        StreamingDecayStep,
+        tags=["continuous"],
+        description="Apply streaming exponential decay to accumulated values",
+    )
+
+    registry.register(
+        "streaming_inter_event",
+        StreamingInterEventStep,
+        tags=["continuous"],
+        description="Compute inter-event features in streaming fashion",
     )
 
 
