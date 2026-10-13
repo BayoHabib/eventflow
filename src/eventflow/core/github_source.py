@@ -13,7 +13,6 @@ import hashlib
 import json
 import re
 from typing import Callable
-from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from eventflow.core.source_corpus import SourceCorpus
@@ -85,7 +84,7 @@ def ingest_github_document(
     if not isinstance(encoded, str) or len(encoded) > 3_000_000:
         raise ValueError("GitHub content missing or oversized")
     try:
-        content = base64.b64decode(encoded, validate=False)
+        content = base64.b64decode("".join(encoded.split()), validate=True)
     except (ValueError, base64.binascii.Error) as exc:
         raise ValueError("invalid GitHub base64 content") from exc
     if len(content) > 2_000_000:
