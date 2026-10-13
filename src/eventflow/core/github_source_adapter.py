@@ -6,12 +6,12 @@ explicitly authorized repositories. It is *not* an arbitrary URL fetcher.
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from datetime import datetime, timezone
 import hashlib
 import json
 import re
-from typing import Callable
-from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from eventflow.core.source_corpus import SourceCorpus
@@ -87,8 +87,6 @@ def ingest_github_document(
     if not license_note.strip():
         raise ValueError("license note required")
 
-    from urllib.parse import quote
-
     url = (
         f"https://api.github.com/repos/{repository}/contents/"
         f"{quote(path, safe='/')}?ref={commit_sha}"
@@ -108,7 +106,7 @@ def ingest_github_document(
         raise ValueError("Git blob integrity mismatch")
     # source IDs remain stable across identical snapshots even with different run dates.
     source_id = hashlib.sha256(
-        f"{repository}@{commit_sha}:{path}".encode("utf-8")
+        f"{repository}@{commit_sha}:{path}".encode()
     ).hexdigest()[:32]
     timestamp = collected_at or datetime.now(timezone.utc).isoformat()
     source_uri = f"https://github.com/{repository}/blob/{commit_sha}/{quote(path, safe='/')}"
