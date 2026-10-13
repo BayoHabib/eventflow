@@ -1,5 +1,6 @@
 """Tests of immutable assertions and contradictory evidence."""
 import hashlib
+import sqlite3
 
 import pytest
 
@@ -61,7 +62,7 @@ def test_disagreement_is_preserved(tmp_path):
 def test_unavailable_reference_is_not_silently_accepted(tmp_path):
     with EvidenceLedger(tmp_path / "ledger.sqlite") as ledger:
         ledger.append(claim())
-        with pytest.raises(Exception):
+        with pytest.raises(sqlite3.IntegrityError):
             ledger.relate("missing", "a1", "supports")
 
 
