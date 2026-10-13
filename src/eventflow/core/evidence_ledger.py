@@ -11,7 +11,8 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 KINDS = frozenset({"observation", "inference", "prediction", "hypothesis", "verification"})
 CLASSIFICATIONS = frozenset({"public", "internal", "restricted"})
@@ -110,7 +111,7 @@ class EvidenceLedger:
             );
         """)
 
-    def __enter__(self) -> "EvidenceLedger":
+    def __enter__(self) -> EvidenceLedger:
         return self
 
     def __exit__(self, *args: object) -> None:
