@@ -5,13 +5,13 @@ from eventflow.core.source_corpus import SourceCorpus, passages
 
 
 def ingest(root, **updates):
-    args = dict(
-        source_id="fixture-001",
-        uri="https://example.org/authorized-document",
-        fetched_at="2026-10-13T14:00:00Z",
-        content=b"One paragraph.\n\nSecond paragraph.",
-        license_note="Synthetic test fixture, reusable",
-    )
+    args = {
+        "source_id": "fixture-001",
+        "uri": "https://example.org/authorized-document",
+        "fetched_at": "2026-10-13T14:00:00Z",
+        "content": b"One paragraph.\n\nSecond paragraph.",
+        "license_note": "Synthetic test fixture, reusable",
+    }
     args.update(updates)
     return SourceCorpus(root).add(**args)
 
