@@ -1,5 +1,4 @@
 """Tests of immutable assertions and contradictory evidence."""
-from datetime import datetime, timezone
 import hashlib
 
 import pytest
