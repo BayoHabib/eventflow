@@ -96,6 +96,19 @@ def ingest_github_document(
 
     canonical_uri = f"https://github.com/{repository}/blob/{commit_sha.lower()}/{path}"
     source_id = hashlib.sha256(canonical_uri.encode("utf-8")).hexdigest()
+    # A pinned source keeps one stable record despite repeated retrieval times.
+    record_path = corpus.root / "records" / f"{source_id}.json"
+    if record_path.exists():
+        existing = json.loads(record_path.read_text(encoding="utf-8"))
+        if (
+            existing.get("source_uri") == canonical_uri
+            and existing.get("content_sha256") == hashlib.sha256(content).hexdigest()
+            and existing.get("license_note") == license_note
+            and corpus.verify(source_id)
+        ):
+            return existing
+        raise ValueError("pinned GitHub source changed or archive was corrupted")
+
     timestamp = fetched_at or datetime.now(timezone.utc).isoformat()
     record = corpus.add(
         source_id=source_id,
