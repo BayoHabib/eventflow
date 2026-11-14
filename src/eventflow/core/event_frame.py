@@ -4,6 +4,7 @@ from typing import Any
 
 import polars as pl
 
+from eventflow.core._async import run_blocking
 from eventflow.core.schema import (
     ContextRequirementState,
     EventMetadata,
@@ -254,6 +255,10 @@ class EventFrame:
         """Collect the first *n* rows."""
 
         return self.lazy_frame.head(n).collect()
+
+    async def collect_async(self) -> pl.DataFrame:
+        """Materialize off the event loop, draining active work on cancellation."""
+        return await run_blocking(self.collect)
 
     def describe(self) -> pl.DataFrame:
         """Return descriptive statistics about the event data."""
