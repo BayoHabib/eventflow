@@ -52,45 +52,51 @@ def sample_event_frame() -> EventFrame:
 
 
 @pytest.fixture
-def gridded_event_frame(sample_event_frame: EventFrame) -> EventFrame:
+def projected_event_frame(sample_event_frame: EventFrame) -> EventFrame:
+    """Use metric coordinates for operations whose parameters are in meters."""
+    return TransformCRSStep("EPSG:26971").run(sample_event_frame)
+
+
+@pytest.fixture
+def gridded_event_frame(projected_event_frame: EventFrame) -> EventFrame:
     """Create an EventFrame that's already been assigned to a grid."""
     step = AssignToGridStep(grid_size_m=500.0)
-    return step.run(sample_event_frame)
+    return step.run(projected_event_frame)
 
 
 class TestAssignToGridStep:
     """Tests for AssignToGridStep."""
 
-    def test_assigns_grid_ids(self, sample_event_frame: EventFrame) -> None:
+    def test_assigns_grid_ids(self, projected_event_frame: EventFrame) -> None:
         """Test that grid IDs are assigned to all events."""
         step = AssignToGridStep(grid_size_m=500.0)
-        result = step.run(sample_event_frame)
+        result = step.run(projected_event_frame)
 
         df = result.collect()
         assert "grid_id" in df.columns
         assert df["grid_id"].null_count() == 0
 
-    def test_registers_feature_provenance(self, sample_event_frame: EventFrame) -> None:
+    def test_registers_feature_provenance(self, projected_event_frame: EventFrame) -> None:
         """Test that grid_id feature is registered with provenance."""
         step = AssignToGridStep(grid_size_m=500.0)
-        result = step.run(sample_event_frame)
+        result = step.run(projected_event_frame)
 
         assert "grid_id" in result.metadata.feature_provenance
         provenance = result.metadata.feature_provenance["grid_id"]
         assert provenance.produced_by == "AssignToGridStep"
         assert "spatial" in provenance.tags
 
-    def test_updates_metadata(self, sample_event_frame: EventFrame) -> None:
+    def test_updates_metadata(self, projected_event_frame: EventFrame) -> None:
         """Test that grid_size_m is stored in metadata."""
         step = AssignToGridStep(grid_size_m=250.0)
-        result = step.run(sample_event_frame)
+        result = step.run(projected_event_frame)
 
         assert result.metadata.grid_size_m == 250.0
 
-    def test_custom_origin(self, sample_event_frame: EventFrame) -> None:
+    def test_custom_origin(self, projected_event_frame: EventFrame) -> None:
         """Test grid assignment with custom origin."""
-        step = AssignToGridStep(grid_size_m=500.0, origin=(-88.0, 41.0))
-        result = step.run(sample_event_frame)
+        step = AssignToGridStep(grid_size_m=500.0, origin=(350000.0, 570000.0))
+        result = step.run(projected_event_frame)
 
         df = result.collect()
         assert "grid_id" in df.columns

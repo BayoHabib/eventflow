@@ -20,6 +20,7 @@ from shapely.wkt import loads as wkt_loads
 
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
+from eventflow.core.spatial import require_metric_crs
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
@@ -191,7 +192,11 @@ class TransformCRSStep(Step):
             description=f"CRS transformation to {self.target_crs}",
         )
 
-        result = event_frame.with_lazy_frame(lf).with_metadata(crs=self.target_crs)
+        result = (
+            event_frame.with_lazy_frame(lf)
+            .with_metadata(crs=self.target_crs)
+            .with_schema(lon_col=f"{lon_col}_proj", lat_col=f"{lat_col}_proj")
+        )
 
         result = result.register_feature(
             f"{lon_col}_proj",
@@ -222,11 +227,14 @@ class AssignToGridStep(Step):
         grid_size_m: float = 500.0,
         origin: tuple[float, float] | None = None,
     ) -> None:
+        if not 0 < grid_size_m < float("inf"):
+            raise ValueError("Grid cell size must be positive and finite")
         self.grid_size_m = grid_size_m
         self.origin = origin
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """Execute grid assignment."""
+        require_metric_crs(event_frame.metadata.crs)
         schema = event_frame.schema
 
         if schema.lat_col is None or schema.lon_col is None:
@@ -256,10 +264,10 @@ class AssignToGridStep(Step):
         lf = (
             lf.with_columns(
                 [
-                    (((pl.col(lon_col) - min_x) / grid_size).floor().cast(pl.Int32)).alias(
+                    (((pl.col(lon_col) - min_x) / grid_size).floor().cast(pl.Int64)).alias(
                         "_col_idx"
                     ),
-                    (((pl.col(lat_col) - min_y) / grid_size).floor().cast(pl.Int32)).alias(
+                    (((pl.col(lat_col) - min_y) / grid_size).floor().cast(pl.Int64)).alias(
                         "_row_idx"
                     ),
                 ]
@@ -269,7 +277,7 @@ class AssignToGridStep(Step):
                     # Compute unique grid_id from row/col indices
                     # Using a large multiplier to ensure uniqueness
                     (
-                        pl.col("_row_idx") * pl.lit(100000, dtype=pl.Int32) + pl.col("_col_idx")
+                        pl.col("_row_idx") * pl.lit(100000, dtype=pl.Int64) + pl.col("_col_idx")
                     ).alias("grid_id")
                 ]
             )
@@ -344,7 +352,7 @@ class AssignToZonesStep(Step):
         def find_zone(lon: float, lat: float) -> int | None:
             """Find zone containing point."""
             point = geometry.Point(lon, lat)
-            idx = tree.query(point, predicate="contains")
+            idx = tree.query(point, predicate="within")
             if len(idx) > 0:
                 first_idx = int(idx[0])
                 return zone_ids[first_idx]

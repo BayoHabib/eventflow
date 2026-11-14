@@ -19,7 +19,7 @@ def extract_temporal_components(
         event_frame: Input EventFrame
         components: List of components to extract:
             - "hour_of_day": Hour (0-23)
-            - "day_of_week": Day of week (0=Monday, 6=Sunday)
+            - "day_of_week": ISO day of week (1=Monday, 7=Sunday)
             - "day_of_month": Day of month (1-31)
             - "day_of_year": Day of year (1-366)
             - "month": Month (1-12)
@@ -55,7 +55,7 @@ def extract_temporal_components(
         exprs.append(pl.col(timestamp_col).dt.year().alias("year"))
 
     if "is_weekend" in components:
-        exprs.append((pl.col(timestamp_col).dt.weekday().is_in([5, 6])).alias("is_weekend"))
+        exprs.append((pl.col(timestamp_col).dt.weekday().is_in([6, 7])).alias("is_weekend"))
 
     if exprs:
         lf = lf.with_columns(exprs)

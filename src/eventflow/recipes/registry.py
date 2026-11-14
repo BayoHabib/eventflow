@@ -17,6 +17,14 @@ logger = get_logger(__name__)
 _RECIPE_REGISTRY: dict[str, dict[str, type[BaseRecipe]]] = {}
 
 
+def _load_builtin_recipes() -> None:
+    """Make packaged recipes discoverable without overwriting user registrations."""
+    if "chicago_crime_v1" not in _RECIPE_REGISTRY.get("chicago_crime", {}):
+        from eventflow.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCrimeV1Recipe
+
+        register_recipe("chicago_crime", "chicago_crime_v1", ChicagoCrimeV1Recipe)
+
+
 def register_recipe(
     dataset_name: str,
     recipe_name: str,
@@ -59,6 +67,7 @@ def get_recipe(
     Raises:
         ValueError: If dataset or recipe not found
     """
+    _load_builtin_recipes()
     if dataset_name not in _RECIPE_REGISTRY:
         raise ValueError(
             f"Dataset '{dataset_name}' not found. "
@@ -91,6 +100,7 @@ def list_recipes(dataset_name: str | None = None) -> dict[str, list[str]]:
     Returns:
         Dictionary mapping dataset names to lists of recipe names
     """
+    _load_builtin_recipes()
     if dataset_name is not None:
         if dataset_name not in _RECIPE_REGISTRY:
             return {}
@@ -106,4 +116,5 @@ def list_datasets() -> list[str]:
     Returns:
         List of dataset names
     """
+    _load_builtin_recipes()
     return list(_RECIPE_REGISTRY.keys())

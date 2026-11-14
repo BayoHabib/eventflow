@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated
 
+import polars as pl
 import typer
 import yaml  # type: ignore[import-untyped]
 
@@ -55,6 +56,12 @@ def run(
     recipe: str = typer.Option(..., help="Recipe name"),
     config: str = typer.Option(..., help="Path to recipe config YAML"),
     output: str | None = typer.Option(None, help="Output path for results"),
+    input_path: Path | None = typer.Option(
+        None, "--input", help="Raw CSV/Parquet file or directory of chunks"
+    ),
+    dataset_config: Path | None = typer.Option(
+        None, "--dataset-config", help="Dataset YAML specifying raw_root and target CRS"
+    ),
 ) -> None:
     """
     Run a recipe on a dataset.
@@ -62,38 +69,60 @@ def run(
     Example:
         eventflow run --dataset chicago_crime --recipe chicago_crime_v1 --config configs/recipes/chicago_crime_v1.yaml
     """
-    from eventflow.core.schema import RecipeConfig
+    from eventflow.core.schema import DatasetConfig, RecipeConfig
+    from eventflow.datasets.chicago_crime.mapping import load_chicago_crime
     from eventflow.recipes.registry import get_recipe
 
     typer.echo(f"Running recipe '{recipe}' on dataset '{dataset}'...")
 
-    # Load config
-    config_path = Path(config)
-    if not config_path.exists():
-        typer.echo(f"Error: Config file not found: {config}", err=True)
-        raise typer.Exit(code=1) from None
-
-    with open(config_path) as f:
-        config_dict = yaml.safe_load(f)
-
-    recipe_config = RecipeConfig(**config_dict)
-
-    # Get recipe, injecting step registry so it can resolve step names
-    step_registry = get_step_registry()
-
     try:
+        with open(config, encoding="utf-8") as f:
+            recipe_config = RecipeConfig(**yaml.safe_load(f))
+        if (recipe_config.dataset, recipe_config.recipe) != (dataset, recipe):
+            raise ValueError("Dataset and recipe arguments must match the recipe configuration")
+        if dataset != "chicago_crime":
+            raise ValueError(f"No CLI data loader is available for dataset: {dataset}")
+        data_config = None
+        if dataset_config is not None:
+            with dataset_config.open(encoding="utf-8") as f:
+                data_config = DatasetConfig(**yaml.safe_load(f))
+            if data_config.dataset_name != dataset:
+                raise ValueError("Dataset configuration must match --dataset")
+        if input_path is not None and data_config is not None:
+            data_config = data_config.model_copy(update={"raw_root": str(input_path)})
+        if input_path is not None:
+            raw_path = str(input_path)
+        elif data_config is not None:
+            raw_path = data_config.raw_root
+        else:
+            raise ValueError("Provide --input or --dataset-config to locate raw data")
+
         recipe_instance = get_recipe(
             dataset,
             recipe,
             recipe_config,
-            step_registry=step_registry,
+            step_registry=get_step_registry(),
         )
-    except ValueError as e:
+        event_frame = load_chicago_crime(raw_path, config=data_config)
+        result = recipe_instance.run(event_frame).collect()
+        output_format = recipe_config.output.get("format", "parquet")
+        destination = (
+            Path(output) if output else Path("data/processed") / f"{recipe}.{output_format}"
+        )
+        if destination.suffix not in {".csv", ".parquet"}:
+            raise ValueError("Output path must end with .csv or .parquet")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.suffix == ".parquet":
+            result.write_parquet(
+                destination, compression=recipe_config.output.get("compression", "snappy")
+            )
+        else:
+            result.write_csv(destination)
+    except (OSError, ValueError, TypeError, yaml.YAMLError, pl.exceptions.PolarsError) as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1) from None
 
-    typer.echo(f"Recipe loaded: {recipe_instance}")
-    typer.echo("Note: Full execution requires loading dataset - implement in your script")
+    typer.echo(f"Saved {result.height} cell/time-bin rows to {destination}")
 
 
 @app.command()

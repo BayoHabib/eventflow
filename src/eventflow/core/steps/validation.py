@@ -236,8 +236,8 @@ def validate_probability_bounds(
     min_val = probs.min()
     max_val = probs.max()
 
-    n_below = (probs < -tolerance).sum()
-    n_above = (probs > 1 + tolerance).sum()
+    n_below = int((probs < -tolerance).sum() or 0)
+    n_above = int((probs > 1 + tolerance).sum() or 0)
 
     is_valid = n_below == 0 and n_above == 0
 
