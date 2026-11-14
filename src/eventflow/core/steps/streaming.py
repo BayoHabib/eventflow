@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 import polars as pl
 from pydantic import BaseModel, Field
 
+from eventflow.core._time import duration_seconds
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
 from eventflow.core.utils import get_logger
@@ -759,21 +760,4 @@ def batch_stream_iterator(
 
 
 def _parse_duration_seconds(duration: str) -> float:
-    """Parse duration string to seconds."""
-    unit_map = {
-        "s": 1,
-        "m": 60,
-        "min": 60,
-        "h": 3600,
-        "hr": 3600,
-        "d": 86400,
-        "day": 86400,
-        "w": 604800,
-        "week": 604800,
-        "1s": 1,
-        "1m": 60,
-        "1h": 3600,
-        "1d": 86400,
-        "1w": 604800,
-    }
-    return float(unit_map.get(duration.lower(), 3600))
+    return duration_seconds(duration)

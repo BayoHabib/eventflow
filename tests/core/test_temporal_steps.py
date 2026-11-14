@@ -161,7 +161,7 @@ class TestTemporalLagStep:
 
     def test_computes_single_lag(self, sample_event_frame: EventFrame) -> None:
         """Test single lag computation."""
-        step = TemporalLagStep(value_cols=["value"], lag_periods=[1])
+        step = TemporalLagStep(value_cols=["value"], lag_periods=[1], mode="rows")
         result = step.run(sample_event_frame)
 
         df = result.collect()
@@ -234,7 +234,7 @@ class TestMovingAverageStep:
 
     def test_moving_average_values(self, sample_event_frame: EventFrame) -> None:
         """Test that moving average values are correct."""
-        step = MovingAverageStep(value_cols=["value"], windows=[2])
+        step = MovingAverageStep(value_cols=["value"], windows=[2], mode="rows")
         result = step.run(sample_event_frame)
 
         df = result.collect()

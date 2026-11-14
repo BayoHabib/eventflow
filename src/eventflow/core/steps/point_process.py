@@ -20,6 +20,7 @@ import numpy as np
 import polars as pl
 from pydantic import BaseModel, Field
 
+from eventflow.core._time import duration_seconds
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
 from eventflow.core.utils import get_logger
@@ -264,11 +265,23 @@ class HawkesKernelStep(Step):
         self.max_history = max_history
         self.group_cols = list(group_cols) if group_cols else []
 
-        # Validate stability condition
         if alpha >= 1.0:
+            raise ValueError("Hawkes stability constraint: alpha must be < 1.0")
+        if not (
+            math.isfinite(alpha)
+            and 0 <= alpha < 1
+            and math.isfinite(beta)
+            and beta > 0
+            and math.isfinite(mu)
+            and mu >= 0
+            and isinstance(max_history, int)
+            and not isinstance(max_history, bool)
+            and max_history > 0
+        ):
             raise ValueError(
-                f"Hawkes process unstable: alpha ({alpha}) must be < 1.0 for stability"
+                "Hawkes parameters require 0 <= alpha < 1, beta > 0, mu >= 0 and max_history > 0"
             )
+        duration_seconds(time_unit)
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """Execute Hawkes kernel computation."""
@@ -283,33 +296,48 @@ class HawkesKernelStep(Step):
         # Sort and collect for kernel computation (requires sequential access)
         sort_cols = self.group_cols + [timestamp_col] if self.group_cols else [timestamp_col]
         df = lf.sort(sort_cols).collect()
+        if any(df[col].null_count() for col in self.group_cols):
+            raise ValueError("Hawkes group keys cannot contain nulls")
 
-        # Compute triggering kernel contributions
-        timestamps = df[timestamp_col].to_numpy()
-        n_events = len(timestamps)
-
-        trigger_contributions = []
-        intensities = []
-
-        for i in range(n_events):
-            # Sum over past events within max_history
-            start_idx = max(0, i - self.max_history)
-            trigger_sum = 0.0
-
-            for j in range(start_idx, i):
-                dt_seconds = _timedelta_to_seconds(timestamps[i] - timestamps[j])
-                trigger_sum += self.alpha * self.beta * math.exp(-beta_per_second * dt_seconds)
-
-            trigger_contributions.append(trigger_sum)
-            intensities.append(self.mu + trigger_sum)
-
-        # Add computed columns
-        result_df = df.with_columns(
-            [
-                pl.Series("hawkes_trigger", trigger_contributions),
-                pl.Series("hawkes_intensity", intensities),
+        # Independent histories; simultaneous observations do not excite each other.
+        parts = df.partition_by(self.group_cols, maintain_order=True) if self.group_cols else [df]
+        outputs = []
+        for part in parts:
+            timestamps = part[timestamp_col].to_numpy()
+            if part[timestamp_col].null_count():
+                raise ValueError("Hawkes timestamps cannot contain nulls")
+            trigger_contributions = []
+            for i in range(len(timestamps)):
+                end = int(np.searchsorted(timestamps, timestamps[i], side="left"))
+                past = range(max(0, end - self.max_history), end)
+                trigger = sum(
+                    self.alpha
+                    * self.beta
+                    * math.exp(
+                        -beta_per_second * _timedelta_to_seconds(timestamps[i] - timestamps[j])
+                    )
+                    for j in past
+                )
+                trigger_contributions.append(trigger)
+            outputs.append(
+                part.with_columns(
+                    pl.Series("hawkes_trigger", trigger_contributions, dtype=pl.Float64),
+                    pl.Series(
+                        "hawkes_intensity",
+                        [self.mu + x for x in trigger_contributions],
+                        dtype=pl.Float64,
+                    ),
+                    pl.lit(self.mu).alias("hawkes_background"),
+                )
+            )
+        result_df = (
+            pl.concat(outputs)
+            if outputs
+            else df.with_columns(
+                pl.lit(None, dtype=pl.Float64).alias("hawkes_trigger"),
+                pl.lit(None, dtype=pl.Float64).alias("hawkes_intensity"),
                 pl.lit(self.mu).alias("hawkes_background"),
-            ]
+            )
         )
 
         result = event_frame.with_lazy_frame(result_df.lazy())
@@ -329,6 +357,9 @@ class HawkesKernelStep(Step):
                     "alpha": self.alpha,
                     "beta": self.beta,
                     "mu": self.mu,
+                    "time_unit": self.time_unit,
+                    "group_cols": self.group_cols,
+                    "history": "strictly earlier timestamps; bounded event history",
                 },
             )
             result = result.register_feature(
@@ -1139,24 +1170,7 @@ class ContinuousInterEventStep(Step):
 
 
 def _parse_time_unit_seconds(time_unit: str) -> float:
-    """Parse time unit string to seconds."""
-    unit_map = {
-        "s": 1,
-        "m": 60,
-        "min": 60,
-        "h": 3600,
-        "hr": 3600,
-        "d": 86400,
-        "day": 86400,
-        "w": 604800,
-        "week": 604800,
-        "1s": 1,
-        "1m": 60,
-        "1h": 3600,
-        "1d": 86400,
-        "1w": 604800,
-    }
-    return float(unit_map.get(time_unit.lower(), 3600))  # Default to 1 hour
+    return duration_seconds(time_unit)
 
 
 def _timedelta_to_seconds(td: Any) -> float:

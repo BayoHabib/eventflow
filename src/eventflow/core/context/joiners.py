@@ -67,11 +67,12 @@ class TemporalJoin:
             )
         else:
             # Use asof join for temporal alignment
-            lf = event_frame.lazy_frame.join_asof(
-                context_frame,
+            lf = event_frame.lazy_frame.sort(event_ts_col).join_asof(
+                context_frame.sort(context_ts_col),
                 left_on=event_ts_col,
                 right_on=context_ts_col,
                 strategy=self.strategy,
+                tolerance=self.tolerance or self.window,
             )
 
         return event_frame.with_lazy_frame(lf)
