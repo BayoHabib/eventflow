@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -291,6 +292,20 @@ def test_grid_creation_rejects_non_metric_crs(crs: str) -> None:
 def test_grid_assignment_rejects_degrees() -> None:
     with pytest.raises(ValueError, match="projected CRS in meters"):
         AssignToGridStep(500).run(geographic_frame())
+
+
+@pytest.mark.parametrize("use_step", [False, True])
+def test_projection_can_be_collected_on_other_threads(use_step: bool) -> None:
+    frame = geographic_frame()
+    projected = (
+        TransformCRSStep("EPSG:26971").run(frame)
+        if use_step
+        else transform_crs(frame, "EPSG:26971")
+    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: projected.collect(), range(4)))
+    assert all(result.equals(results[0]) for result in results)
+    assert results[0]["longitude_proj"][0] == pytest.approx(352634.941673, abs=0.01)
 
 
 @pytest.mark.parametrize("use_step", [False, True])

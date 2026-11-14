@@ -14,13 +14,12 @@ from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 from pydantic import BaseModel, Field
-from pyproj import Transformer
 from shapely import STRtree, geometry
 from shapely.wkt import loads as wkt_loads
 
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
-from eventflow.core.spatial import require_metric_crs
+from eventflow.core.spatial import require_metric_crs, transform_crs
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
@@ -156,34 +155,8 @@ class TransformCRSStep(Step):
         if schema.lat_col is None or schema.lon_col is None:
             raise ValueError("EventFrame must have lat/lon columns for CRS transformation")
 
-        transformer = Transformer.from_crs(
-            event_frame.metadata.crs,
-            self.target_crs,
-            always_xy=True,
-        )
-
         lon_col = schema.lon_col
         lat_col = schema.lat_col
-
-        lf = (
-            event_frame.lazy_frame.with_columns(
-                [
-                    pl.struct([lon_col, lat_col])
-                    .map_elements(
-                        lambda coord: transformer.transform(coord[lon_col], coord[lat_col]),
-                        return_dtype=pl.List(pl.Float64),
-                    )
-                    .alias("_transformed")
-                ]
-            )
-            .with_columns(
-                [
-                    pl.col("_transformed").list.get(0).alias(f"{lon_col}_proj"),
-                    pl.col("_transformed").list.get(1).alias(f"{lat_col}_proj"),
-                ]
-            )
-            .drop("_transformed")
-        )
 
         provenance = FeatureProvenance(
             produced_by="TransformCRSStep",
@@ -192,11 +165,7 @@ class TransformCRSStep(Step):
             description=f"CRS transformation to {self.target_crs}",
         )
 
-        result = (
-            event_frame.with_lazy_frame(lf)
-            .with_metadata(crs=self.target_crs)
-            .with_schema(lon_col=f"{lon_col}_proj", lat_col=f"{lat_col}_proj")
-        )
+        result = transform_crs(event_frame, self.target_crs)
 
         result = result.register_feature(
             f"{lon_col}_proj",

@@ -1,6 +1,7 @@
 """Spatial operations for event data."""
 
 import math
+from collections.abc import Sequence
 
 import polars as pl
 from pyproj import CRS, Transformer
@@ -44,30 +45,30 @@ def transform_crs(
     if schema.lat_col is None or schema.lon_col is None:
         raise ValueError("EventFrame must have lat/lon columns for CRS transformation")
 
-    transformer = Transformer.from_crs(
-        event_frame.metadata.crs,
-        target_crs,
-        always_xy=True,
-    )
+    source_crs = event_frame.metadata.crs
+
+    def project_batch(columns: Sequence[pl.Series]) -> pl.Series:
+        # Build and use native PROJ state in the executing worker, not in a
+        # different thread that created the lazy plan. Project whole arrays.
+        transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+        x, y = transformer.transform(columns[0].to_numpy(), columns[1].to_numpy())
+        return pl.DataFrame({"x": x, "y": y}).to_struct()
 
     # Transform coordinates
     lf = (
         event_frame.lazy_frame.with_columns(
             [
-                pl.struct([schema.lon_col, schema.lat_col])
-                .map_elements(
-                    lambda coord: transformer.transform(
-                        coord[schema.lon_col], coord[schema.lat_col]
-                    ),
-                    return_dtype=pl.List(pl.Float64),
-                )
-                .alias("_transformed")
+                pl.map_batches(
+                    [schema.lon_col, schema.lat_col],
+                    project_batch,
+                    return_dtype=pl.Struct({"x": pl.Float64, "y": pl.Float64}),
+                ).alias("_transformed")
             ]
         )
         .with_columns(
             [
-                pl.col("_transformed").list.get(0).alias(f"{schema.lon_col}_proj"),
-                pl.col("_transformed").list.get(1).alias(f"{schema.lat_col}_proj"),
+                pl.col("_transformed").struct.field("x").alias(f"{schema.lon_col}_proj"),
+                pl.col("_transformed").struct.field("y").alias(f"{schema.lat_col}_proj"),
             ]
         )
         .drop("_transformed")
