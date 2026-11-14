@@ -1,7 +1,6 @@
 """Spatial operations for event data."""
 
 import math
-from collections.abc import Sequence
 
 import polars as pl
 from pyproj import CRS, Transformer
@@ -47,32 +46,17 @@ def transform_crs(
 
     source_crs = event_frame.metadata.crs
 
-    def project_batch(columns: Sequence[pl.Series]) -> pl.Series:
-        # Build and use native PROJ state in the executing worker, not in a
-        # different thread that created the lazy plan. Project whole arrays.
-        transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
-        x, y = transformer.transform(columns[0].to_numpy(), columns[1].to_numpy())
-        return pl.DataFrame({"x": x, "y": y}).to_struct()
-
-    # Transform coordinates
-    lf = (
-        event_frame.lazy_frame.with_columns(
-            [
-                pl.map_batches(
-                    [schema.lon_col, schema.lat_col],
-                    project_batch,
-                    return_dtype=pl.Struct({"x": pl.Float64, "y": pl.Float64}),
-                ).alias("_transformed")
-            ]
-        )
-        .with_columns(
-            [
-                pl.col("_transformed").struct.field("x").alias(f"{schema.lon_col}_proj"),
-                pl.col("_transformed").struct.field("y").alias(f"{schema.lat_col}_proj"),
-            ]
-        )
-        .drop("_transformed")
-    )
+    # A projection is a materialization boundary. Native PROJ objects must not
+    # be created in expression callbacks that the query optimizer can duplicate
+    # onto different short-lived engine threads. Create/use the handle in this
+    # step's owning Python thread; async callers already offload the entire step.
+    df = event_frame.collect()
+    transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    x, y = transformer.transform(df[schema.lon_col].to_numpy(), df[schema.lat_col].to_numpy())
+    lf = df.with_columns(
+        pl.Series(f"{schema.lon_col}_proj", x, dtype=pl.Float64),
+        pl.Series(f"{schema.lat_col}_proj", y, dtype=pl.Float64),
+    ).lazy()
 
     return (
         event_frame.with_lazy_frame(lf)

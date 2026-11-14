@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Literal
 import polars as pl
 from pydantic import BaseModel, Field
 
+from eventflow.core._time import duration_seconds
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
 from eventflow.core.utils import get_logger
@@ -60,7 +61,8 @@ class TemporalLagConfig(BaseModel):
 
     value_cols: list[str] = Field(..., description="Columns to compute temporal lags for")
     lag_periods: list[int] = Field(default=[1], description="Lag periods to compute")
-    time_unit: str = Field(default="1d", description="Time unit for lag periods")
+    time_unit: str = Field(default="1d", description="Elapsed time unit for lag periods")
+    mode: Literal["duration", "rows"] = "duration"
     group_cols: list[str] = Field(
         default_factory=list, description="Optional columns to group by before computing lags"
     )
@@ -73,7 +75,9 @@ class MovingAverageConfig(BaseModel):
     windows: list[int] = Field(default=[7], description="Window sizes for moving averages")
     time_unit: str = Field(default="1d", description="Time unit for window periods")
     group_cols: list[str] = Field(default_factory=list, description="Optional columns to group by")
-    center: bool = Field(default=False, description="Whether to center the window")
+    center: bool = Field(default=False, description="Centering is supported in rows mode only")
+    mode: Literal["duration", "rows"] = "duration"
+    closed: Literal["left", "right", "both", "none"] = "left"
 
 
 class RecencyWeightConfig(BaseModel):
@@ -272,12 +276,17 @@ class TemporalLagStep(Step):
         lag_periods: Sequence[int] | None = None,
         time_unit: str = "1d",
         group_cols: Sequence[str] | None = None,
+        mode: Literal["duration", "rows"] = "duration",
     ) -> None:
         self.value_cols = list(value_cols)
         if lag_periods is None:
             lag_periods = self._builder_lags or [1]
         self.lag_periods = list(lag_periods)
         self.time_unit = time_unit
+        self.mode = mode
+        _validate_periods(self.lag_periods, mode)
+        if mode == "duration":
+            duration_seconds(time_unit)
         self.group_cols = list(group_cols) if group_cols else []
 
     @classmethod
@@ -297,25 +306,46 @@ class TemporalLagStep(Step):
 
         # Sort by timestamp (and group cols if specified)
         sort_cols = self.group_cols + [timestamp_col] if self.group_cols else [timestamp_col]
-        lf = lf.sort(sort_cols)
+        lf = lf.sort(sort_cols, maintain_order=True)
+        if self.mode == "duration":
+            _validate_time_keys(lf, self.group_cols + [timestamp_col])
+        source = lf
 
         for value_col in self.value_cols:
             for lag in self.lag_periods:
                 lag_col = f"{value_col}_lag_{lag}"
 
-                if self.group_cols:
-                    lf = lf.with_columns(
-                        [pl.col(value_col).shift(lag).over(self.group_cols).alias(lag_col)]
+                if self.mode == "duration":
+                    # Exact elapsed lag: absence at t - duration stays unknown.
+                    shifted = source.select(
+                        *self.group_cols,
+                        (
+                            pl.col(timestamp_col)
+                            + pl.duration(
+                                microseconds=round(duration_seconds(self.time_unit) * lag * 1e6)
+                            )
+                        ).alias(timestamp_col),
+                        pl.col(value_col).alias(lag_col),
+                    )
+                    lf = lf.join(
+                        shifted,
+                        on=self.group_cols + [timestamp_col],
+                        how="left",
+                        validate="m:1",
+                        maintain_order="left",
                     )
                 else:
-                    lf = lf.with_columns([pl.col(value_col).shift(lag).alias(lag_col)])
+                    expr = pl.col(value_col).shift(lag)
+                    if self.group_cols:
+                        expr = expr.over(self.group_cols)
+                    lf = lf.with_columns(expr.alias(lag_col))
 
                 provenance = FeatureProvenance(
                     produced_by="TemporalLagStep",
                     inputs=[value_col, timestamp_col],
                     tags={"temporal"},
                     description=f"Temporal lag of {value_col} by {lag} periods",
-                    metadata={"lag": lag, "time_unit": self.time_unit},
+                    metadata={"lag": lag, "time_unit": self.time_unit, "mode": self.mode},
                 )
                 result = result.register_feature(
                     lag_col,
@@ -346,6 +376,8 @@ class MovingAverageStep(Step):
         time_unit: str = "1d",
         group_cols: Sequence[str] | None = None,
         center: bool = False,
+        mode: Literal["duration", "rows"] = "duration",
+        closed: Literal["left", "right", "both", "none"] = "left",
     ) -> None:
         self.value_cols = list(value_cols)
         if windows is None:
@@ -354,6 +386,15 @@ class MovingAverageStep(Step):
         self.time_unit = time_unit
         self.group_cols = list(group_cols) if group_cols else []
         self.center = center
+        self.mode = mode
+        self.closed = closed
+        _validate_periods(self.windows, mode)
+        if mode == "duration":
+            duration_seconds(time_unit)
+            if center:
+                raise ValueError("center=True requires mode='rows'; duration windows are trailing")
+        if closed not in {"left", "right", "both", "none"}:
+            raise ValueError("Unknown window boundary policy")
 
     @classmethod
     def with_windows(cls, windows: Sequence[int]) -> type[MovingAverageStep]:
@@ -372,36 +413,42 @@ class MovingAverageStep(Step):
 
         # Sort by timestamp (and group cols if specified)
         sort_cols = self.group_cols + [timestamp_col] if self.group_cols else [timestamp_col]
-        lf = lf.sort(sort_cols)
+        lf = lf.sort(sort_cols, maintain_order=True)
+        if self.mode == "duration":
+            _validate_time_keys(lf, self.group_cols + [timestamp_col])
 
         for value_col in self.value_cols:
             for window in self.windows:
                 ma_col = f"{value_col}_ma_{window}"
 
-                if self.group_cols:
-                    lf = lf.with_columns(
-                        [
-                            pl.col(value_col)
-                            .rolling_mean(window_size=window, center=self.center, min_samples=1)
-                            .over(self.group_cols)
-                            .alias(ma_col)
-                        ]
+                if self.mode == "duration":
+                    micros = round(duration_seconds(self.time_unit) * window * 1e6)
+                    expr = pl.col(value_col).rolling_mean_by(
+                        timestamp_col,
+                        window_size=f"{micros}us",
+                        closed=self.closed,
+                        min_samples=1,
                     )
                 else:
-                    lf = lf.with_columns(
-                        [
-                            pl.col(value_col)
-                            .rolling_mean(window_size=window, center=self.center, min_samples=1)
-                            .alias(ma_col)
-                        ]
+                    expr = pl.col(value_col).rolling_mean(
+                        window_size=window, center=self.center, min_samples=1
                     )
+                if self.group_cols:
+                    expr = expr.over(self.group_cols)
+                lf = lf.with_columns(expr.alias(ma_col))
 
                 provenance = FeatureProvenance(
                     produced_by="MovingAverageStep",
                     inputs=[value_col, timestamp_col],
                     tags={"temporal"},
                     description=f"Moving average of {value_col} with window {window}",
-                    metadata={"window": window, "time_unit": self.time_unit, "center": self.center},
+                    metadata={
+                        "window": window,
+                        "time_unit": self.time_unit,
+                        "center": self.center,
+                        "mode": self.mode,
+                        "closed": self.closed,
+                    },
                 )
                 result = result.register_feature(
                     ma_col,
@@ -765,17 +812,19 @@ class InterArrivalStep(Step):
 
 
 def _parse_time_unit_seconds(time_unit: str) -> float:
-    """Parse time unit string to seconds."""
-    unit_map = {
-        "s": 1,
-        "m": 60,
-        "h": 3600,
-        "d": 86400,
-        "w": 604800,
-        "1s": 1,
-        "1m": 60,
-        "1h": 3600,
-        "1d": 86400,
-        "1w": 604800,
-    }
-    return float(unit_map.get(time_unit.lower(), 86400))  # Default to 1 day
+    return duration_seconds(time_unit)
+
+
+def _validate_periods(periods: Sequence[int], mode: str) -> None:
+    if mode not in {"duration", "rows"}:
+        raise ValueError("mode must be 'duration' or 'rows'")
+    if not periods or any(isinstance(p, bool) or not isinstance(p, int) or p <= 0 for p in periods):
+        raise ValueError("Periods must be positive integers")
+
+
+def _validate_time_keys(lf: pl.LazyFrame, keys: list[str]) -> None:
+    data = lf.select(keys).collect()
+    if any(data[col].null_count() for col in keys):
+        raise ValueError("Temporal keys cannot contain nulls")
+    if data.is_duplicated().any():
+        raise ValueError("Duplicate temporal keys: aggregate or disambiguate each group/time first")

@@ -26,7 +26,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "polars>=0.20.0",
+    "numpy>=1.24",
+    "polars>=1.30.0",
     "pydantic>=2.0.0",
     "shapely>=2.0.0",
     "pyproj>=3.5.0",

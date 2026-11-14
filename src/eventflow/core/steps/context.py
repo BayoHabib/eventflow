@@ -12,14 +12,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
+import numpy as np
 import polars as pl
+import shapely
 from pydantic import BaseModel, Field
 from pyproj import Transformer
 from shapely import STRtree, geometry
-from shapely.wkt import loads as wkt_loads
 
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
+from eventflow.core.spatial import require_metric_crs
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
@@ -43,7 +45,7 @@ class SpatialContextJoinConfig(BaseModel):
         default="contains", description="Spatial predicate for join"
     )
     max_distance: float | None = Field(
-        default=None, description="Maximum distance for nearest neighbor join"
+        default=None, ge=0, description="Maximum distance for nearest neighbor join"
     )
     fill_value: Any = Field(default=None, description="Value for unmatched events")
 
@@ -68,6 +70,7 @@ class SpatioTemporalContextJoinConfig(BaseModel):
     temporal_strategy: Literal["exact", "asof_backward", "asof_forward"] = Field(
         default="asof_backward", description="Temporal join strategy"
     )
+    tolerance: str | None = None
     fill_value: Any = Field(default=None, description="Value for unmatched events")
 
 
@@ -105,6 +108,8 @@ class SpatialContextJoinStep(Step):
         self.context_cols = list(context_cols)
         self.join_type = join_type
         self.context_crs = context_crs
+        if max_distance is not None and (not np.isfinite(max_distance) or max_distance < 0):
+            raise ValueError("max_distance must be finite and non-negative")
         self.max_distance = max_distance
         self.fill_value = fill_value
 
@@ -119,78 +124,58 @@ class SpatialContextJoinStep(Step):
         lat_col = schema.lat_col
         event_crs = event_frame.metadata.crs
 
-        # Collect context data if lazy
         ctx_df = (
             self.context_data.collect()
             if isinstance(self.context_data, pl.LazyFrame)
             else self.context_data
         )
-
-        # Handle CRS transformation if needed
-        transformer: Transformer | None = None
-        if self.context_crs and self.context_crs != event_crs:
-            logger.info(f"Transforming coordinates from {event_crs} to {self.context_crs}")
-            transformer = Transformer.from_crs(event_crs, self.context_crs, always_xy=True)
-
-        # Build spatial index from context geometries
-        geoms = [wkt_loads(wkt) for wkt in ctx_df[self.context_spatial_col]]
-        tree = STRtree(geoms)
-
-        # Build lookup dictionary for context attributes
-        ctx_records = ctx_df.select([self.context_spatial_col] + self.context_cols).to_dicts()
-        geom_to_attrs = {}
-        for i, rec in enumerate(ctx_records):
-            geom_to_attrs[i] = {k: rec[k] for k in self.context_cols}
-
-        def find_context(lon: float, lat: float) -> dict[str, Any]:
-            """Find matching context for a point."""
-            # Transform coordinates if needed
-            if transformer:
-                lon, lat = transformer.transform(lon, lat)
-
-            point = geometry.Point(lon, lat)
-
-            if self.join_type == "contains":
-                idx = tree.query(point, predicate="contains")
-            elif self.join_type == "intersects":
-                idx = tree.query(point, predicate="intersects")
-            elif self.join_type == "nearest":
-                idx = tree.nearest(point)
-                if self.max_distance is not None:
-                    nearest_geom = geoms[idx]
-                    if point.distance(nearest_geom) > self.max_distance:
-                        return dict.fromkeys(self.context_cols, self.fill_value)
-                return geom_to_attrs.get(idx, dict.fromkeys(self.context_cols, self.fill_value))
-            else:
-                raise ValueError(f"Unknown join type: {self.join_type}")
-
-            if len(idx) > 0:
-                return geom_to_attrs.get(
-                    int(idx[0]), dict.fromkeys(self.context_cols, self.fill_value)
-                )
-            return dict.fromkeys(self.context_cols, self.fill_value)
-
-        # Apply join
-        lf = event_frame.lazy_frame
-
-        for col in self.context_cols:
-            col_name = col  # Capture in local variable for lambda
-
-            def get_col_value(coord: dict[str, float], c: str = col_name) -> Any:
-                return find_context(coord[lon_col], coord[lat_col]).get(c, self.fill_value)
-
-            lf = lf.with_columns(
-                [
-                    pl.struct([lon_col, lat_col])
-                    .map_elements(
-                        get_col_value,
-                        return_dtype=pl.Object,
-                    )
-                    .alias(col)
-                ]
+        geoms = shapely.from_wkt(ctx_df[self.context_spatial_col].to_numpy())
+        if not np.all(shapely.is_valid(geoms) & ~shapely.is_empty(geoms)):
+            raise ValueError("Context geometries must be valid and non-empty")
+        df = event_frame.collect()
+        coords = df.select(lon_col, lat_col).to_numpy().astype(float)
+        target_crs = self.context_crs or event_crs
+        valid = np.isfinite(coords).all(axis=1)
+        if target_crs != event_crs:
+            # Projection and geometry work stay in this worker, including collection.
+            transformer = Transformer.from_crs(event_crs, target_crs, always_xy=True)
+            coords[valid, 0], coords[valid, 1] = transformer.transform(
+                coords[valid, 0], coords[valid, 1]
             )
-
-        result = event_frame.with_lazy_frame(lf)
+        valid &= np.isfinite(coords).all(axis=1)
+        if self.join_type == "nearest":
+            require_metric_crs(target_crs)
+        elif self.join_type not in {"contains", "intersects"}:
+            raise ValueError(f"Unknown join type: {self.join_type}")
+        tree = STRtree(geoms)
+        indices: list[int | None] = []
+        for i, (x, y) in enumerate(coords):
+            if not valid[i] or len(geoms) == 0:
+                indices.append(None)
+                continue
+            point = geometry.Point(x, y)
+            if self.join_type == "nearest":
+                matches = tree.query_nearest(point, all_matches=True)
+                selected = min(int(j) for j in matches)
+                if (
+                    self.max_distance is not None
+                    and point.distance(geoms[selected]) > self.max_distance
+                ):
+                    indices.append(None)
+                else:
+                    indices.append(selected)
+            else:
+                # STRtree applies predicate(query, tree geometry), hence within.
+                predicate = "within" if self.join_type == "contains" else "intersects"
+                matches = tree.query(point, predicate=predicate)
+                indices.append(min(int(j) for j in matches) if len(matches) else None)
+        columns = []
+        for col in self.context_cols:
+            series = ctx_df[col].gather(pl.Series(indices, dtype=pl.UInt32))
+            if self.fill_value is not None:
+                series = series.fill_null(self.fill_value)
+            columns.append(series.alias(col))
+        result = event_frame.with_lazy_frame(df.with_columns(columns).lazy())
 
         # Register provenance for joined columns
         for col in self.context_cols:
@@ -272,6 +257,7 @@ class TemporalContextJoinStep(Step):
                 left_on=timestamp_col,
                 right_on=self.context_timestamp_col,
                 strategy="nearest",
+                tolerance=self.tolerance,
             )
         elif self.strategy == "asof_backward":
             result_lf = lf.join_asof(
@@ -279,6 +265,7 @@ class TemporalContextJoinStep(Step):
                 left_on=timestamp_col,
                 right_on=self.context_timestamp_col,
                 strategy="backward",
+                tolerance=self.tolerance,
             )
         elif self.strategy == "asof_forward":
             result_lf = lf.join_asof(
@@ -286,6 +273,7 @@ class TemporalContextJoinStep(Step):
                 left_on=timestamp_col,
                 right_on=self.context_timestamp_col,
                 strategy="forward",
+                tolerance=self.tolerance,
             )
         else:
             raise ValueError(f"Unknown join strategy: {self.strategy}")
@@ -337,6 +325,7 @@ class SpatioTemporalContextJoinStep(Step):
         context_cols: Sequence[str],
         temporal_strategy: str = "asof_backward",
         fill_value: Any = None,
+        tolerance: str | None = None,
     ) -> None:
         self.context_data = context_data
         self.spatial_key = spatial_key
@@ -344,6 +333,7 @@ class SpatioTemporalContextJoinStep(Step):
         self.context_cols = list(context_cols)
         self.temporal_strategy = temporal_strategy
         self.fill_value = fill_value
+        self.tolerance = tolerance
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """Execute spatio-temporal context join."""
@@ -371,6 +361,7 @@ class SpatioTemporalContextJoinStep(Step):
                 right_on=self.temporal_key,
                 by=self.spatial_key,
                 strategy="backward",
+                tolerance=self.tolerance,
             )
         elif self.temporal_strategy == "asof_forward":
             result_lf = lf.join_asof(
@@ -379,6 +370,7 @@ class SpatioTemporalContextJoinStep(Step):
                 right_on=self.temporal_key,
                 by=self.spatial_key,
                 strategy="forward",
+                tolerance=self.tolerance,
             )
         elif self.temporal_strategy == "exact":
             result_lf = lf.join(

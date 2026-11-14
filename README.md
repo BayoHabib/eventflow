@@ -10,6 +10,9 @@ A generic library for preparing and transforming spatio-temporal datasets before
 
 ## Overview
 
+Numerical definitions, migration notes and remaining foundations are described in
+[preprocessing contracts](docs/preprocessing_contracts.md).
+
 Pipelines support [asynchronous execution](docs/async_execution.md):
 
 ```python

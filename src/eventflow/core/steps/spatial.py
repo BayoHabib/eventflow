@@ -9,9 +9,10 @@ Each step:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
 import polars as pl
 from pydantic import BaseModel, Field
 from shapely import STRtree, geometry
@@ -21,6 +22,7 @@ from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
 from eventflow.core.spatial import require_metric_crs, transform_crs
 from eventflow.core.utils import get_logger
+from eventflow.core.weights import SpatialWeights
 
 if TYPE_CHECKING:
     from eventflow.core.event_frame import EventFrame
@@ -97,6 +99,7 @@ class SpatialLagConfig(BaseModel):
     weights: Literal["queen", "rook", "knn", "distance"] = Field(
         default="queen", description="Spatial weights type"
     )
+    group_cols: list[str] = Field(default_factory=list)
     k: int = Field(default=4, ge=1, description="Number of neighbors for KNN weights")
     distance_threshold: float | None = Field(
         default=None, description="Distance threshold for distance-based weights"
@@ -111,12 +114,17 @@ class LocalAutocorrelationConfig(BaseModel):
     weights: Literal["queen", "rook", "knn"] = Field(
         default="queen", description="Spatial weights type"
     )
-    permutations: int = Field(default=99, ge=0, description="Number of permutations for p-value")
+    permutations: int = Field(default=99, ge=0, description="Number of conditional permutations")
+    group_cols: list[str] = Field(default_factory=list)
+    k: int = Field(default=4, ge=1)
+    seed: int = 0
+    significance: float = Field(default=0.05, gt=0, lt=1)
 
 
 class GetisOrdConfig(BaseModel):
     """Configuration for Getis-Ord Gi* step."""
 
+    group_cols: list[str] = Field(default_factory=list)
     value_col: str = Field(..., description="Column to compute hotspot statistics for")
     spatial_unit_col: str = Field(default="grid_id", description="Spatial unit identifier")
     distance_threshold: float | None = Field(
@@ -250,7 +258,7 @@ class AssignToGridStep(Step):
                     ).alias("grid_id")
                 ]
             )
-            .drop(["_col_idx", "_row_idx"])
+            .rename({"_col_idx": "grid_col", "_row_idx": "grid_row"})
         )
 
         provenance = FeatureProvenance(
@@ -587,14 +595,11 @@ class KDEStep(Step):
 
 
 class SpatialLagStep(Step):
-    """Compute spatial lag (weighted average of neighbors) for specified columns.
+    """Row-standardized binary spatial lag on explicitly identified units.
 
-    Inputs:
-        - neighbor_col (spatial unit identifier)
-        - value_cols to compute lag for
-
-    Outputs:
-        - {value_col}_spatial_lag columns
+    Defaults to a single spatial snapshot. Supply group_cols (for example,
+    time_bin) to compute separate snapshots without pooling across time.
+    Islands yield null; absent reference units require an explicit panel.
     """
 
     def __init__(
@@ -604,84 +609,75 @@ class SpatialLagStep(Step):
         weights: str = "queen",
         k: int = 4,
         distance_threshold: float | None = None,
+        group_cols: Sequence[str] | None = None,
+        spatial_units: pl.DataFrame | None = None,
+        spatial_weights: SpatialWeights | None = None,
     ) -> None:
         self.value_cols = list(value_cols)
         self.neighbor_col = neighbor_col
         self.weights_type = weights
         self.k = k
         self.distance_threshold = distance_threshold
+        self.group_cols = list(group_cols or [])
+        self.spatial_units = spatial_units
+        self.spatial_weights = spatial_weights
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        """Execute spatial lag computation."""
-        lf = event_frame.lazy_frame
-
-        # First, compute cell-level aggregates
-        cell_stats = lf.group_by(self.neighbor_col).agg(
-            [pl.col(col).mean().alias(f"{col}_cell_mean") for col in self.value_cols]
+        outputs = []
+        for part, stats, rows in _spatial_snapshots(
+            event_frame,
+            self.neighbor_col,
+            self.value_cols,
+            self.group_cols,
+            self.weights_type,
+            self.k,
+            self.distance_threshold,
+            self.spatial_units,
+            self.spatial_weights,
+        ):
+            features = []
+            for col in self.value_cols:
+                values = stats[col].to_numpy()
+                lag = [float(values[list(row)].mean()) if row else None for row in rows]
+                features.append(pl.Series(f"{col}_spatial_lag", lag, dtype=pl.Float64))
+            lookup = stats.select(self.neighbor_col).with_columns(features)
+            outputs.append(
+                part.join(
+                    lookup, on=self.neighbor_col, how="left", validate="m:1", maintain_order="left"
+                )
+            )
+        result = _spatial_result(
+            event_frame, outputs, {f"{col}_spatial_lag": pl.Float64 for col in self.value_cols}
         )
-
-        # For grid-based data, compute neighbors based on spatial adjacency
-        # This is a simplified implementation using grid ID arithmetic
-        # For queen contiguity on a grid: neighbors differ by ±1 in row or col
-        result = event_frame
-
-        for value_col in self.value_cols:
-            lag_col = f"{value_col}_spatial_lag"
-            cell_mean_col = f"{value_col}_cell_mean"
-
-            # Self-join to get neighbor values (simplified: using grid adjacency)
-            # In practice, you'd use proper spatial weights matrix
-            # Here we approximate by averaging cells with nearby grid_ids
-
-            # Join cell means to main frame
-            lf = lf.join(
-                cell_stats.select([self.neighbor_col, cell_mean_col]),
-                on=self.neighbor_col,
-                how="left",
-            )
-
-            # Compute lag as shifted values (simplified grid-based approach)
-            # Create lag by considering adjacent grid cells
-            # For row-based grid_id = row * 100000 + col:
-            # neighbors are ±1 (horizontal) and ±100000 (vertical)
-
-            # Simplified: use rolling average of nearby grid_ids
-            lf = lf.sort(self.neighbor_col).with_columns(
-                [
-                    pl.col(cell_mean_col)
-                    .rolling_mean(window_size=3, center=True, min_samples=1)
-                    .alias(lag_col)
-                ]
-            )
-
-            # Remove intermediate column
-            lf = lf.drop(cell_mean_col)
-
-            provenance = FeatureProvenance(
-                produced_by="SpatialLagStep",
-                inputs=[value_col, self.neighbor_col],
-                tags={"spatial"},
-                description=f"Spatial lag of {value_col} using {self.weights_type} weights",
-            )
+        for col in self.value_cols:
             result = result.register_feature(
-                lag_col,
-                {"source_step": "SpatialLagStep", "value_col": value_col},
-                provenance=provenance,
+                f"{col}_spatial_lag",
+                {"source_step": "SpatialLagStep"},
+                provenance=FeatureProvenance(
+                    produced_by="SpatialLagStep",
+                    inputs=[col, self.neighbor_col],
+                    tags={"spatial"},
+                    metadata={
+                        "weights": (
+                            "supplied_binary"
+                            if self.spatial_weights is not None
+                            else self.weights_type
+                        ),
+                        "normalization": "row",
+                        "group_cols": self.group_cols,
+                        "islands": "null",
+                    },
+                ),
             )
-
-        return result.with_lazy_frame(lf)
+        return result
 
 
 class LocalMoranStep(Step):
-    """Compute Local Moran's I for spatial autocorrelation.
+    """Anselin local I with population second moment and conditional randomization.
 
-    Inputs:
-        - value_col to compute autocorrelation for
-        - spatial_unit_col for spatial unit identifier
-
-    Outputs:
-        - {value_col}_local_moran_i: Local Moran's I statistic
-        - {value_col}_moran_cluster: Cluster classification (HH, LL, HL, LH)
+    Binary neighbors are row-standardized, excluding self. P-values use a
+    two-sided deviation from the conditional expectation, with +1 correction.
+    No cluster significance is claimed when permutations=0 or variance is zero.
     """
 
     def __init__(
@@ -690,110 +686,119 @@ class LocalMoranStep(Step):
         spatial_unit_col: str = "grid_id",
         weights: str = "queen",
         permutations: int = 99,
+        group_cols: Sequence[str] | None = None,
+        k: int = 4,
+        seed: int = 0,
+        significance: float = 0.05,
+        spatial_units: pl.DataFrame | None = None,
+        spatial_weights: SpatialWeights | None = None,
     ) -> None:
-        self.value_col = value_col
-        self.spatial_unit_col = spatial_unit_col
-        self.weights_type = weights
-        self.permutations = permutations
+        if not isinstance(permutations, int) or permutations < 0 or not 0 < significance < 1:
+            raise ValueError("permutations must be non-negative and significance in (0, 1)")
+        self.value_col, self.spatial_unit_col = value_col, spatial_unit_col
+        self.weights_type, self.permutations = weights, permutations
+        self.group_cols, self.k = list(group_cols or []), k
+        self.seed, self.significance = seed, significance
+        self.spatial_units, self.spatial_weights = spatial_units, spatial_weights
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        """Execute Local Moran's I computation."""
-        lf = event_frame.lazy_frame
-
         i_col = f"{self.value_col}_local_moran_i"
+        p_col = f"{self.value_col}_local_moran_p"
         cluster_col = f"{self.value_col}_moran_cluster"
-
-        # Compute cell-level statistics
-        cell_stats = lf.group_by(self.spatial_unit_col).agg(
-            [pl.col(self.value_col).mean().alias("cell_mean")]
-        )
-
-        # Compute global mean and std
-        global_stats = (
-            cell_stats.select(
-                [
-                    pl.col("cell_mean").mean().alias("global_mean"),
-                    pl.col("cell_mean").std().alias("global_std"),
-                ]
+        outputs = []
+        for part, stats, rows in _spatial_snapshots(
+            event_frame,
+            self.spatial_unit_col,
+            [self.value_col],
+            self.group_cols,
+            self.weights_type,
+            self.k,
+            None,
+            self.spatial_units,
+            self.spatial_weights,
+        ):
+            values = stats[self.value_col].to_numpy().astype(float)
+            centered = values - values.mean()
+            m2 = float(np.mean(centered**2))
+            n = len(values)
+            observed: list[float | None] = []
+            pvalues: list[float | None] = []
+            clusters = []
+            rng = np.random.default_rng(self.seed)
+            for i, row in enumerate(rows):
+                statistic = pvalue = None
+                cluster = "NS"
+                if row and m2 > 0 and n > 1:
+                    lag = float(centered[list(row)].mean())
+                    statistic = float(centered[i] * lag / m2)
+                    if self.permutations:
+                        pool = np.delete(centered, i)
+                        expected = -float(centered[i] ** 2) / ((n - 1) * m2)
+                        simulated = [
+                            float(
+                                centered[i] * rng.choice(pool, len(row), replace=False).mean() / m2
+                            )
+                            for _ in range(self.permutations)
+                        ]
+                        extreme = sum(
+                            abs(x - expected) >= abs(statistic - expected) - 1e-12
+                            for x in simulated
+                        )
+                        pvalue = (extreme + 1) / (self.permutations + 1)
+                        if pvalue <= self.significance and centered[i] != 0 and lag != 0:
+                            cluster = ("H" if centered[i] > 0 else "L") + ("H" if lag > 0 else "L")
+                observed.append(statistic)
+                pvalues.append(pvalue)
+                clusters.append(cluster)
+            lookup = stats.select(self.spatial_unit_col).with_columns(
+                pl.Series(i_col, observed, dtype=pl.Float64),
+                pl.Series(p_col, pvalues, dtype=pl.Float64),
+                pl.Series(cluster_col, clusters, dtype=pl.String),
             )
-            .collect()
-            .row(0)
+            outputs.append(
+                part.join(
+                    lookup,
+                    on=self.spatial_unit_col,
+                    how="left",
+                    validate="m:1",
+                    maintain_order="left",
+                )
+            )
+        result = _spatial_result(
+            event_frame, outputs, {i_col: pl.Float64, p_col: pl.Float64, cluster_col: pl.String}
         )
-        global_mean, global_std = global_stats[0], global_stats[1]
-
-        if global_std is None or global_std == 0:
-            global_std = 1.0  # Avoid division by zero
-
-        # Standardize cell values
-        cell_stats = cell_stats.with_columns(
-            [((pl.col("cell_mean") - global_mean) / global_std).alias("z_score")]
-        )
-
-        # Compute spatial lag of z-scores (simplified: rolling mean)
-        cell_stats = cell_stats.sort(self.spatial_unit_col).with_columns(
-            [
-                pl.col("z_score")
-                .rolling_mean(window_size=3, center=True, min_samples=1)
-                .alias("z_lag")
-            ]
-        )
-
-        # Local Moran's I = z * spatial_lag(z)
-        cell_stats = cell_stats.with_columns([(pl.col("z_score") * pl.col("z_lag")).alias(i_col)])
-
-        # Classify clusters
-        cell_stats = cell_stats.with_columns(
-            [
-                pl.when((pl.col("z_score") > 0) & (pl.col("z_lag") > 0))
-                .then(pl.lit("HH"))
-                .when((pl.col("z_score") < 0) & (pl.col("z_lag") < 0))
-                .then(pl.lit("LL"))
-                .when((pl.col("z_score") > 0) & (pl.col("z_lag") < 0))
-                .then(pl.lit("HL"))
-                .when((pl.col("z_score") < 0) & (pl.col("z_lag") > 0))
-                .then(pl.lit("LH"))
-                .otherwise(pl.lit("NS"))
-                .alias(cluster_col)
-            ]
-        )
-
-        # Join back to main frame
-        join_cols = [self.spatial_unit_col, i_col, cluster_col]
-        result_lf = lf.join(cell_stats.select(join_cols), on=self.spatial_unit_col, how="left")
-
-        provenance = FeatureProvenance(
-            produced_by="LocalMoranStep",
-            inputs=[self.value_col, self.spatial_unit_col],
-            tags={"spatial"},
-            description=f"Local Moran's I for {self.value_col}",
-            metadata={"weights": self.weights_type, "permutations": self.permutations},
-        )
-
-        result = event_frame.with_lazy_frame(result_lf)
-        result = result.register_feature(
-            i_col,
-            {"source_step": "LocalMoranStep", "value_col": self.value_col},
-            provenance=provenance,
-        )
-        result = result.register_feature(
-            cluster_col,
-            {"source_step": "LocalMoranStep", "value_col": self.value_col},
-            provenance=provenance,
-        )
-
+        for name in (i_col, p_col, cluster_col):
+            result = result.register_feature(
+                name,
+                {"source_step": "LocalMoranStep"},
+                provenance=FeatureProvenance(
+                    produced_by="LocalMoranStep",
+                    inputs=[self.value_col, self.spatial_unit_col],
+                    tags={"spatial"},
+                    metadata={
+                        "weights": (
+                            "supplied_binary"
+                            if self.spatial_weights is not None
+                            else self.weights_type
+                        ),
+                        "permutations": self.permutations,
+                        "seed": self.seed,
+                        "variance_divisor": "n",
+                        "group_cols": self.group_cols,
+                        "alternative": "two-sided conditional deviation",
+                        "significance": self.significance,
+                    },
+                ),
+            )
         return result
 
 
 class GetisOrdStep(Step):
-    """Compute Getis-Ord Gi* hotspot statistic.
+    """Binary Gi* normal z-score using neighbors plus self and population variance.
 
-    Inputs:
-        - value_col to compute hotspot statistics for
-        - spatial_unit_col for spatial unit identifier
-
-    Outputs:
-        - {value_col}_gi_star: Gi* z-score
-        - {value_col}_hotspot: Hotspot classification (hot, cold, not_significant)
+    Default adjacency is queen contiguity; a threshold selects metric distance
+    bands instead. Degenerate variance/denominator produces null, never evidence
+    of a hotspot. Labels use unadjusted two-sided normal cutoff 1.96.
     """
 
     def __init__(
@@ -801,94 +806,146 @@ class GetisOrdStep(Step):
         value_col: str,
         spatial_unit_col: str = "grid_id",
         distance_threshold: float | None = None,
+        group_cols: Sequence[str] | None = None,
+        spatial_units: pl.DataFrame | None = None,
+        spatial_weights: SpatialWeights | None = None,
     ) -> None:
-        self.value_col = value_col
-        self.spatial_unit_col = spatial_unit_col
+        self.value_col, self.spatial_unit_col = value_col, spatial_unit_col
         self.distance_threshold = distance_threshold
+        self.group_cols = list(group_cols or [])
+        self.spatial_units, self.spatial_weights = spatial_units, spatial_weights
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        """Execute Getis-Ord Gi* computation."""
-        lf = event_frame.lazy_frame
-
-        gi_col = f"{self.value_col}_gi_star"
-        hotspot_col = f"{self.value_col}_hotspot"
-
-        # Compute cell-level statistics
-        cell_stats = lf.group_by(self.spatial_unit_col).agg(
-            [
-                pl.col(self.value_col).sum().alias("cell_sum"),
-                pl.col(self.value_col).count().alias("cell_count"),
-            ]
-        )
-
-        # Compute global statistics
-        global_stats = (
-            cell_stats.select(
-                [
-                    pl.col("cell_sum").sum().alias("total_sum"),
-                    pl.col("cell_count").sum().alias("total_count"),
-                    pl.col("cell_sum").mean().alias("global_mean"),
-                    pl.col("cell_sum").std().alias("global_std"),
-                ]
+        gi_col, hotspot_col = f"{self.value_col}_gi_star", f"{self.value_col}_hotspot"
+        outputs = []
+        for part, stats, rows in _spatial_snapshots(
+            event_frame,
+            self.spatial_unit_col,
+            [self.value_col],
+            self.group_cols,
+            "distance" if self.distance_threshold is not None else "queen",
+            4,
+            self.distance_threshold,
+            self.spatial_units,
+            self.spatial_weights,
+            aggregation="sum",
+        ):
+            values = stats[self.value_col].to_numpy().astype(float)
+            n, mean, std = len(values), float(values.mean()), float(values.std())
+            scores: list[float | None] = []
+            labels = []
+            for i, row in enumerate(rows):
+                indices = list(row) + [i]
+                w = len(indices)
+                denom = std * np.sqrt((n * w - w**2) / (n - 1)) if n > 1 else 0.0
+                score = float((values[indices].sum() - mean * w) / denom) if denom > 0 else None
+                scores.append(score)
+                labels.append(
+                    "hot"
+                    if score is not None and score > 1.96
+                    else "cold" if score is not None and score < -1.96 else "not_significant"
+                )
+            lookup = stats.select(self.spatial_unit_col).with_columns(
+                pl.Series(gi_col, scores, dtype=pl.Float64),
+                pl.Series(hotspot_col, labels, dtype=pl.String),
             )
-            .collect()
-            .row(0)
-        )
-        total_sum, total_count, global_mean, global_std = global_stats
-
-        if global_std is None or global_std == 0:
-            global_std = 1.0
-
-        # Compute local sum including neighbors (simplified: rolling sum)
-        cell_stats = cell_stats.sort(self.spatial_unit_col).with_columns(
-            [
-                pl.col("cell_sum")
-                .rolling_sum(window_size=3, center=True, min_samples=1)
-                .alias("local_sum")
-            ]
-        )
-
-        # Gi* = (local_sum - expected) / std
-        w = 3  # Window size (number of neighbors + self)
-        expected = global_mean * w if global_mean is not None else 0
-
-        cell_stats = cell_stats.with_columns(
-            [((pl.col("local_sum") - expected) / global_std).alias(gi_col)]
-        )
-
-        # Classify hotspots (z > 1.96 = hot, z < -1.96 = cold)
-        cell_stats = cell_stats.with_columns(
-            [
-                pl.when(pl.col(gi_col) > 1.96)
-                .then(pl.lit("hot"))
-                .when(pl.col(gi_col) < -1.96)
-                .then(pl.lit("cold"))
-                .otherwise(pl.lit("not_significant"))
-                .alias(hotspot_col)
-            ]
-        )
-
-        # Join back to main frame
-        join_cols = [self.spatial_unit_col, gi_col, hotspot_col]
-        result_lf = lf.join(cell_stats.select(join_cols), on=self.spatial_unit_col, how="left")
-
-        provenance = FeatureProvenance(
-            produced_by="GetisOrdStep",
-            inputs=[self.value_col, self.spatial_unit_col],
-            tags={"spatial"},
-            description=f"Getis-Ord Gi* for {self.value_col}",
-        )
-
-        result = event_frame.with_lazy_frame(result_lf)
-        result = result.register_feature(
-            gi_col,
-            {"source_step": "GetisOrdStep", "value_col": self.value_col},
-            provenance=provenance,
-        )
-        result = result.register_feature(
-            hotspot_col,
-            {"source_step": "GetisOrdStep", "value_col": self.value_col},
-            provenance=provenance,
-        )
-
+            outputs.append(
+                part.join(
+                    lookup,
+                    on=self.spatial_unit_col,
+                    how="left",
+                    validate="m:1",
+                    maintain_order="left",
+                )
+            )
+        result = _spatial_result(event_frame, outputs, {gi_col: pl.Float64, hotspot_col: pl.String})
+        for name in (gi_col, hotspot_col):
+            result = result.register_feature(
+                name,
+                {"source_step": "GetisOrdStep"},
+                provenance=FeatureProvenance(
+                    produced_by="GetisOrdStep",
+                    inputs=[self.value_col, self.spatial_unit_col],
+                    tags={"spatial"},
+                    metadata={
+                        "self_weight": 1,
+                        "weights": "binary",
+                        "group_cols": self.group_cols,
+                        "inference": "unadjusted normal z-score",
+                    },
+                ),
+            )
         return result
+
+
+def _spatial_snapshots(
+    event_frame: EventFrame,
+    unit_col: str,
+    value_cols: list[str],
+    group_cols: list[str],
+    method: str,
+    k: int,
+    threshold: float | None,
+    spatial_units: pl.DataFrame | None,
+    supplied: SpatialWeights | None,
+    *,
+    aggregation: str = "mean",
+) -> Iterator[tuple[pl.DataFrame, pl.DataFrame, tuple[tuple[int, ...], ...]]]:
+    df = event_frame.collect()
+    if df[unit_col].null_count() or any(df[c].null_count() for c in group_cols):
+        raise ValueError("Spatial unit and snapshot keys cannot contain nulls")
+    if any(not np.isfinite(df[c].to_numpy().astype(float)).all() for c in value_cols):
+        raise ValueError(
+            "Spatial statistics require finite observed values; choose a missing-data policy first"
+        )
+    for part in (df.partition_by(group_cols, maintain_order=True) if group_cols else [df]):
+        if part.is_empty():
+            continue
+        aggs = [pl.col(c).sum() if aggregation == "sum" else pl.col(c).mean() for c in value_cols]
+        stats = part.group_by(unit_col).agg(aggs).sort(unit_col)
+        ids = stats[unit_col].to_list()
+        if supplied is not None:
+            weights = supplied
+        else:
+            if spatial_units is not None:
+                reference = spatial_units
+            elif {"grid_row", "grid_col"} <= set(part.columns) and method in {"queen", "rook"}:
+                reference = part.select(unit_col, "grid_row", "grid_col").unique(
+                    maintain_order=True
+                )
+            elif event_frame.schema.geometry_col and method in {"queen", "rook"}:
+                reference = part.select(
+                    unit_col, pl.col(event_frame.schema.geometry_col).alias("geometry")
+                ).unique(maintain_order=True)
+            elif event_frame.schema.lon_col and event_frame.schema.lat_col:
+                reference = part.select(
+                    unit_col,
+                    pl.col(event_frame.schema.lon_col).alias("x"),
+                    pl.col(event_frame.schema.lat_col).alias("y"),
+                ).unique(maintain_order=True)
+            else:
+                raise ValueError("Supply a spatial reference table or SpatialWeights")
+            weights = SpatialWeights.from_units(
+                reference,
+                unit_col,
+                method=method,
+                crs=event_frame.metadata.crs,
+                k=k,
+                distance_threshold=threshold,
+            )
+        yield part, stats, weights.aligned(ids)
+
+
+def _spatial_result(
+    event_frame: EventFrame,
+    outputs: list[pl.DataFrame],
+    columns: dict[str, pl.DataType | type[pl.DataType]],
+) -> EventFrame:
+    lf = (
+        pl.concat(outputs).lazy()
+        if outputs
+        else event_frame.lazy_frame.with_columns(
+            [pl.lit(None, dtype=dtype).alias(name) for name, dtype in columns.items()]
+        )
+    )
+    return event_frame.with_lazy_frame(lf)

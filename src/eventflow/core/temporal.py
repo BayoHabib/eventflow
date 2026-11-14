@@ -127,27 +127,30 @@ def align_temporal(
     elif strategy == "nearest":
         # This is a simplified implementation
         # In production, use more efficient temporal join algorithms
-        lf = event_frame.lazy_frame.join_asof(
-            context_frame,
+        lf = event_frame.lazy_frame.sort(event_timestamp_col).join_asof(
+            context_frame.sort(context_timestamp_col),
             left_on=event_timestamp_col,
             right_on=context_timestamp_col,
             strategy="nearest",
+            tolerance=window,
         )
 
     elif strategy == "before":
-        lf = event_frame.lazy_frame.join_asof(
-            context_frame,
+        lf = event_frame.lazy_frame.sort(event_timestamp_col).join_asof(
+            context_frame.sort(context_timestamp_col),
             left_on=event_timestamp_col,
             right_on=context_timestamp_col,
             strategy="backward",
+            tolerance=window,
         )
 
     elif strategy == "after":
-        lf = event_frame.lazy_frame.join_asof(
-            context_frame,
+        lf = event_frame.lazy_frame.sort(event_timestamp_col).join_asof(
+            context_frame.sort(context_timestamp_col),
             left_on=event_timestamp_col,
             right_on=context_timestamp_col,
             strategy="forward",
+            tolerance=window,
         )
 
     else:
