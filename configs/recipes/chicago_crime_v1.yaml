@@ -4,6 +4,7 @@ recipe: "chicago_crime_v1"
 # Spatial configuration
 grid:
   size_m: 300  # 300m x 300m grid cells
+  origin: [0.0, 0.0]  # Fixed origin in EPSG:26971 meters, shared across batches
   buffer_m: 0  # No buffer around grid
 
 # Temporal configuration

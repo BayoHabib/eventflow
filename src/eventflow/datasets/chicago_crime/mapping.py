@@ -1,9 +1,12 @@
 """Data loading and mapping for Chicago Crime dataset."""
 
+from pathlib import Path
+
 import polars as pl
 
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.schema import DatasetConfig
+from eventflow.core.spatial import transform_crs
 from eventflow.core.utils import get_logger
 from eventflow.datasets.chicago_crime.schema import CHICAGO_CRIME_SCHEMA, create_chicago_metadata
 
@@ -12,7 +15,7 @@ logger = get_logger(__name__)
 
 def load_raw_chicago(raw_path: str, layout: str = "nested") -> pl.LazyFrame:
     """
-    Load raw Chicago crime data from Parquet files.
+    Load one file or a directory of Chicago crime CSV or Parquet chunks.
 
     Args:
         raw_path: Root path to raw data
@@ -21,18 +24,27 @@ def load_raw_chicago(raw_path: str, layout: str = "nested") -> pl.LazyFrame:
     Returns:
         LazyFrame with raw data
     """
-    if layout == "nested":
-        # Assumes year/month partitioned structure
-        pattern = f"{raw_path}/**/*.parquet"
+    if layout not in {"nested", "flat"}:
+        raise ValueError("layout must be 'nested' or 'flat'")
+    root = Path(raw_path)
+    if root.is_file():
+        files = [root]
     else:
-        # Flat structure
-        pattern = f"{raw_path}/*.parquet"
+        candidates = root.rglob("*") if layout == "nested" else root.glob("*")
+        files = sorted(
+            p for p in candidates if p.is_file() and p.suffix.lower() in {".csv", ".parquet"}
+        )
+    if not files:
+        raise FileNotFoundError(f"No CSV or Parquet data files found under {raw_path}")
+    formats = {p.suffix.lower() for p in files}
+    if len(formats) != 1 or not formats <= {".csv", ".parquet"}:
+        raise ValueError("Select input files containing only CSV or only Parquet chunks")
 
-    logger.info(f"Loading Chicago crime data from: {pattern}")
-    lf = pl.scan_parquet(pattern)
-    logger.debug(f"LazyFrame created with columns: {lf.columns}")
-
-    return lf
+    logger.info("Loading %d Chicago crime chunk(s) from %s", len(files), raw_path)
+    frames = [
+        pl.scan_parquet(p) if p.suffix.lower() == ".parquet" else pl.scan_csv(p) for p in files
+    ]
+    return pl.concat(frames, how="diagonal_relaxed")
 
 
 def clean_chicago_data(lf: pl.LazyFrame) -> pl.LazyFrame:
@@ -46,24 +58,55 @@ def clean_chicago_data(lf: pl.LazyFrame) -> pl.LazyFrame:
         Cleaned LazyFrame
     """
     logger.info("Applying data cleaning to Chicago crime data")
-    # Parse date column
-    lf = lf.with_columns([pl.col("date").str.to_datetime("%m/%d/%Y %I:%M:%S %p").alias("date")])
+    schema = lf.collect_schema()
+    required = {"date", "latitude", "longitude"}
+    if missing := required - set(schema.names()):
+        raise ValueError(f"Missing required Chicago crime columns: {sorted(missing)}")
+
+    if schema["date"] == pl.String:
+        date_expr = pl.coalesce(
+            pl.col("date").str.to_datetime(fmt, strict=False)
+            for fmt in (
+                "%Y-%m-%dT%H:%M:%S%.f",
+                "%Y-%m-%d %H:%M:%S%.f",
+                "%m/%d/%Y %I:%M:%S %p",
+            )
+        )
+    elif schema["date"] == pl.Date or schema["date"] == pl.Datetime:
+        date_expr = pl.col("date").cast(pl.Datetime)
+    else:
+        raise ValueError("Chicago crime dates must be strings, dates, or datetimes")
+
+    lf = lf.with_columns(
+        date_expr.alias("date"),
+        pl.col("latitude").cast(pl.Float64, strict=False),
+        pl.col("longitude").cast(pl.Float64, strict=False),
+    )
 
     # Filter out rows with missing coordinates
-    lf = lf.filter(pl.col("latitude").is_not_null() & pl.col("longitude").is_not_null())
+    lf = lf.filter(pl.col("date").is_not_null())
 
     # Filter out invalid coordinates
     lf = lf.filter(
-        (pl.col("latitude").is_between(-90, 90)) & (pl.col("longitude").is_between(-180, 180))
+        pl.col("latitude").is_finite()
+        & pl.col("longitude").is_finite()
+        & pl.col("latitude").is_between(-90, 90)
+        & pl.col("longitude").is_between(-180, 180)
     )
 
     # Convert boolean-like columns
-    lf = lf.with_columns(
-        [
-            (pl.col("arrest") == "true").alias("arrest"),
-            (pl.col("domestic") == "true").alias("domestic"),
-        ]
-    )
+    for name in ("arrest", "domestic"):
+        if name in schema and schema[name] != pl.Boolean:
+            text = pl.col(name).cast(pl.String).str.to_lowercase()
+            lf = lf.with_columns(
+                pl.when(text.is_in(["true", "1"]))
+                .then(True)
+                .when(text.is_in(["false", "0"]))
+                .then(False)
+                .otherwise(None)
+                .cast(pl.Boolean)
+                .alias(name)
+            )
 
     logger.info("Data cleaning completed")
     return lf
@@ -105,12 +148,13 @@ def load_chicago_crime(
 
     # Create metadata
     metadata = create_chicago_metadata(
-        crs=crs,
+        crs="EPSG:4326",  # Socrata latitude/longitude are geographic input coordinates.
         time_zone=time_zone,
     )
 
     # Create EventFrame
-    return EventFrame(lf, CHICAGO_CRIME_SCHEMA, metadata)
+    event_frame = EventFrame(lf, CHICAGO_CRIME_SCHEMA, metadata)
+    return transform_crs(event_frame, crs)
 
 
 def sample_chicago_data(

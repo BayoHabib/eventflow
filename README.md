@@ -39,6 +39,39 @@ cd eventflow
 pip install -e ".[dev]"
 ```
 
+## Chicago downloader to features
+
+Run the packaged Chicago recipe directly on downloaded CSV or Parquet chunks:
+
+```bash
+pip install "chicago-crime-downloader[parquet]"
+chicago-crime-dl --mode daily --start-date 2020-01-10 --end-date 2020-01-10 \
+  --out-root data/raw/chicago_crime --out-format parquet
+eventflow run --dataset chicago_crime --recipe chicago_crime_v1 \
+  --config configs/recipes/chicago_crime_v1.yaml \
+  --input data/raw/chicago_crime --output data/processed/chicago_features.parquet
+```
+
+`--input` accepts a file or a directory of one format (CSV or Parquet). Alternatively,
+pass `--dataset-config configs/datasets/chicago_crime_example.yaml`; `--input` overrides
+its `raw_root` when both are supplied. The command writes one CSV or Parquet file.
+
+The baseline normalizes ISO/legacy timestamps, numeric coordinate strings, and booleans,
+and removes records without valid timestamps or geographic coordinates. It projects
+Socrata longitude/latitude from EPSG:4326 to EPSG:26971 before assigning meter-based cells.
+`DatasetConfig.crs` is a target CRS and now performs a coordinate transformation.
+
+The bundled recipe keeps **300-meter cells and six-hour bins**. Its fixed grid origin
+defaults to `(0, 0)` in projected meters, so cell identifiers remain stable across batches.
+Set `grid.origin: [x, y]` to choose another fixed origin. Output contains `grid_id`,
+`time_bin`, `count`, cell-center coordinates, bin-start `date`, and configured calendar
+components. It counts observed cell/bin pairs; zero-count pairs require a separate
+completion step. Extended categorical and moving-window features remain outside this baseline.
+
+For custom spatial pipelines, both CRS transformations update the active coordinate
+columns in `EventSchema`. Meter-based grid operations reject geographic and foot-based
+CRSs. Call `TransformCRSStep` first and pass a metric `crs` explicitly to `create_grid`.
+
 ## Quick Start
 
 ```python

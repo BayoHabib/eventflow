@@ -1,13 +1,25 @@
 """Spatial operations for event data."""
 
+import math
+from collections.abc import Sequence
+
 import polars as pl
-from pyproj import Transformer
-from shapely import STRtree, geometry
+from pyproj import CRS, Transformer
+from shapely import STRtree, from_wkt, geometry
 
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
+
+
+def require_metric_crs(crs: str) -> None:
+    """Reject meter-based operations on geographic or non-meter coordinates."""
+    definition = CRS.from_user_input(crs)
+    if not definition.is_projected or not all(
+        math.isclose(axis.unit_conversion_factor, 1.0) for axis in definition.axis_info[:2]
+    ):
+        raise ValueError("Grid operations require a projected CRS in meters; transform CRS first")
 
 
 def transform_crs(
@@ -33,36 +45,41 @@ def transform_crs(
     if schema.lat_col is None or schema.lon_col is None:
         raise ValueError("EventFrame must have lat/lon columns for CRS transformation")
 
-    transformer = Transformer.from_crs(
-        event_frame.metadata.crs,
-        target_crs,
-        always_xy=True,
-    )
+    source_crs = event_frame.metadata.crs
+
+    def project_batch(columns: Sequence[pl.Series]) -> pl.Series:
+        # Build and use native PROJ state in the executing worker, not in a
+        # different thread that created the lazy plan. Project whole arrays.
+        transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+        x, y = transformer.transform(columns[0].to_numpy(), columns[1].to_numpy())
+        return pl.DataFrame({"x": x, "y": y}).to_struct()
 
     # Transform coordinates
     lf = (
         event_frame.lazy_frame.with_columns(
             [
-                pl.struct([schema.lon_col, schema.lat_col])
-                .map_elements(
-                    lambda coord: transformer.transform(
-                        coord[schema.lon_col], coord[schema.lat_col]
-                    ),
-                    return_dtype=pl.List(pl.Float64),
-                )
-                .alias("_transformed")
+                pl.map_batches(
+                    [schema.lon_col, schema.lat_col],
+                    project_batch,
+                    return_dtype=pl.Struct({"x": pl.Float64, "y": pl.Float64}),
+                ).alias("_transformed")
             ]
         )
         .with_columns(
             [
-                pl.col("_transformed").list.get(0).alias(f"{schema.lon_col}_proj"),
-                pl.col("_transformed").list.get(1).alias(f"{schema.lat_col}_proj"),
+                pl.col("_transformed").struct.field("x").alias(f"{schema.lon_col}_proj"),
+                pl.col("_transformed").struct.field("y").alias(f"{schema.lat_col}_proj"),
             ]
         )
         .drop("_transformed")
     )
 
-    return event_frame.with_lazy_frame(lf).with_metadata(crs=target_crs)
+    return (
+        event_frame.with_lazy_frame(lf)
+        .with_metadata(crs=target_crs)
+        .with_schema(lon_col=f"{schema.lon_col}_proj", lat_col=f"{schema.lat_col}_proj")
+        .require_context(spatial_crs=target_crs)
+    )
 
 
 def create_grid(
@@ -81,7 +98,12 @@ def create_grid(
     Returns:
         DataFrame with grid cells (grid_id, minx, miny, maxx, maxy, geometry)
     """
+    require_metric_crs(crs)
+    if not math.isfinite(size_m) or size_m <= 0:
+        raise ValueError("Grid cell size must be positive and finite")
     minx, miny, maxx, maxy = bounds
+    if not all(math.isfinite(v) for v in bounds) or minx > maxx or miny > maxy:
+        raise ValueError("Grid bounds must be finite and ordered")
 
     # Calculate number of cells
     n_cols = int((maxx - minx) / size_m) + 1
@@ -135,6 +157,10 @@ def assign_to_grid(
 
     if schema.lat_col is None or schema.lon_col is None:
         raise ValueError("EventFrame must have lat/lon columns for grid assignment")
+
+    require_metric_crs(event_frame.metadata.crs)
+    if grid.is_empty():
+        raise ValueError("Grid must contain at least one cell")
 
     # Get grid parameters
     grid_data = grid.to_dict(as_series=False)
@@ -202,7 +228,7 @@ def assign_to_zones(
         raise ValueError("EventFrame must have lat/lon columns for zone assignment")
 
     # Build spatial index
-    zone_geoms = [geometry.from_wkt(wkt) for wkt in zones[zone_geom_col]]
+    zone_geoms = [from_wkt(wkt) for wkt in zones[zone_geom_col]]
     zone_ids_raw = zones[zone_id_col].to_list()
     zone_ids: list[int | None] = []
     for value in zone_ids_raw:
@@ -217,7 +243,7 @@ def assign_to_zones(
     def find_zone(lon: float, lat: float) -> int | None:
         """Find zone containing point."""
         point = geometry.Point(lon, lat)
-        idx = tree.query(point, predicate="contains")
+        idx = tree.query(point, predicate="within")
         if len(idx) > 0:
             first_idx = int(idx[0])
             zone_id = zone_ids[first_idx]

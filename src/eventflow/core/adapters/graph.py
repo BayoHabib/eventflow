@@ -253,7 +253,7 @@ class GraphAdapter(BaseModalityAdapter[GraphOutput]):
             edge_index = np.zeros((2, 0), dtype=np.int64)
 
         # Create adjacency matrix
-        adjacency = np.zeros((n_nodes, n_nodes), dtype=np_dtype)
+        adjacency: np.ndarray = np.zeros((n_nodes, n_nodes), dtype=np_dtype)
         for (src, dst), w in zip(edge_list, edge_weights, strict=True):
             adjacency[src, dst] = w
 

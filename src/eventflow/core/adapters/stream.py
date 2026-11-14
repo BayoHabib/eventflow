@@ -212,7 +212,7 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
         if self.config.time_origin == "first":
             origin = ts_numeric[0] if len(ts_numeric) > 0 else 0.0
         elif self.config.time_origin == "min":
-            origin = ts_numeric.min() if len(ts_numeric) > 0 else 0.0
+            origin = float(np.min(ts_numeric)) if len(ts_numeric) > 0 else 0.0
         elif self.config.time_origin == "custom" and self.config.custom_origin:
             try:
                 origin_dt = datetime.fromisoformat(self.config.custom_origin)
