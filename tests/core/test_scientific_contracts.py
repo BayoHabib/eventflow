@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 import polars as pl
 import pytest
@@ -84,10 +83,16 @@ def test_duration_features_reject_ambiguous_duplicate_times(step) -> None:
 
 
 def test_fixed_day_is_24_elapsed_hours_across_dst() -> None:
-    tz = ZoneInfo("America/Toronto")
+    # Use UTC inputs plus Polars' bundled zone database on every platform.
     ef = frame(
-        {"time": [datetime(2024, 3, 9, 12, tzinfo=tz), datetime(2024, 3, 10, 12, tzinfo=tz)]}
+        {
+            "time": [
+                datetime(2024, 3, 9, 17, tzinfo=timezone.utc),
+                datetime(2024, 3, 10, 16, tzinfo=timezone.utc),
+            ]
+        }
     )
+    ef = ef.with_columns(pl.col("time").dt.convert_time_zone("America/Toronto"))
     assert TemporalLagStep(["value"]).run(ef).collect()["value_lag_1"].to_list() == [None, None]
 
 
