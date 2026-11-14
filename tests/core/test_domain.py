@@ -90,15 +90,15 @@ def test_wkt_geometry_frames_require_whole_geometry_inside(domain: SpatialDomain
     frame = EventFrame(
         pl.DataFrame(
             {
-                "time": [datetime(2024, 1, 1)] * 3,
-                "shape": ["POINT (1 1)", "LINESTRING (1 1, 5 1)", None],
+                "time": [datetime(2024, 1, 1)] * 4,
+                "shape": ["POINT (1 1)", "LINESTRING (1 1, 5 1)", None, "POINT EMPTY"],
             }
         ).lazy(),
         EventSchema(timestamp_col="time", geometry_col="shape"),
         EventMetadata(dataset_name="moving-assets", crs="EPSG:3857"),
     )
     result = SpatialDomainMaskStep(domain).run(frame).collect()
-    assert result["inside_domain"].to_list() == [True, False, None]
+    assert result["inside_domain"].to_list() == [True, False, None, None]
 
 
 def test_coverage_has_exact_areas_and_keeps_excluded_cells(

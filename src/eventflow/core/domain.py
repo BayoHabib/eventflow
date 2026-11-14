@@ -112,8 +112,9 @@ def domain_membership_expr(
             locations = shapely.points(x[valid], y[valid])
         else:
             raw = batch[0].cast(pl.String).to_numpy()
-            valid = ~shapely.is_missing(shapely.from_wkt(raw))
-            locations = shapely.from_wkt(raw[valid])
+            parsed = shapely.from_wkt(raw)
+            valid = ~shapely.is_missing(parsed) & ~shapely.is_empty(parsed)
+            locations = parsed[valid]
             if not np.all(shapely.is_valid(locations)):
                 raise ValueError("Input WKT geometries must be valid")
         predicate = shapely.covers if include_boundary else shapely.contains_properly

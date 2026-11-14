@@ -55,7 +55,7 @@ eagerly as auxiliary data.
 |---|---|
 | `true` | The location is in the caller-defined domain. |
 | `false` | The location is known and outside the domain or in an exclusion. |
-| `null` | The location is missing or its point coordinates are not finite. |
+| `null` | The location is missing/empty or its point coordinates are not finite. |
 
 `mode="filter"` explicitly retains only `true` rows. Boundary points are included
 by default; `include_boundary=False` requires strict interior containment. For
