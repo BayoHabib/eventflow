@@ -6,9 +6,18 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/BayoHabib/eventflow/releases)
 
-A high-performance, generic spatio-temporal event transformation engine for feature engineering and MLOps pipelines.
+A generic library for preparing and transforming spatio-temporal datasets before analysis.
 
 ## Overview
+
+The core supplies reusable spatial and temporal treatments. Dataset adapters and
+recipes assemble them for a particular source; interpretation, statistical analysis,
+and model training consume the prepared outputs downstream.
+
+Configurable [spatial-domain preprocessing](docs/spatial_domains.md) supports
+caller-supplied footprints and exclusions, optional event filtering, and geometric
+cell coverage with provenance. It works with arbitrary EventFrame schemas and
+introduces no default geographical or application-specific exclusions.
 
 EventFlow transforms raw event data (crime records, sensor readings, transactions, etc.) into **ML-ready formats** for various model architectures:
 

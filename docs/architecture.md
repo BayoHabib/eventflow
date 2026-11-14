@@ -2,7 +2,10 @@
 
 ## Overview
 
-Eventflow is designed as a layered architecture that separates generic event transformation logic from dataset-specific implementations. This design enables high performance, reusability, and extensibility.
+Eventflow is a generic library for preparing spatio-temporal datasets before analysis.
+Reusable transformations live in the core; dataset adapters and recipes supply
+source mappings, parameters, and domain-specific choices. Statistical analyses and
+model training operate downstream on the prepared outputs.
 
 ## Architecture Layers
 
@@ -13,6 +16,8 @@ The core layer contains all dataset-agnostic abstractions and primitives:
 - **Schema definitions** (`schema.py`): Event and context schemas using Pydantic
 - **Event frames** (`event_frame.py`): Central abstraction wrapping Polars LazyFrame
 - **Spatial operations** (`spatial.py`): Grid construction, zone assignment, projections
+- **Spatial domains** (`domain.py`): Caller-defined footprints/exclusions and geometric
+  cell coverage, composed through optional domain steps; see [spatial domains](spatial_domains.md).
 - **Temporal operations** (`temporal.py`): Time binning, component extraction, alignment
 - **Feature engineering** (`features.py`): Generic aggregations and encodings
 - **Context enrichment** (`context/`): Abstract sources and join strategies
@@ -125,5 +130,5 @@ Multi-stage process:
 - Distributed execution (Dask, Ray)
 - GPU acceleration for spatial operations
 - Streaming ingestion from Kafka/Pulsar
-- Model training integration
+- Additional interoperable outputs for downstream analysis tools
 - Web UI for recipe management

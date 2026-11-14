@@ -24,10 +24,12 @@ _output_registry: OutputAdapterRegistry | None = None
 
 
 def get_step_registry() -> FeatureStepRegistry:
-    """Return the global step registry, loading entry points on first call."""
+    """Load built-in treatments and plugin entry points on first access."""
+    from eventflow.core.steps.registration import get_default_registry
+
     global _step_registry
     if _step_registry is None:
-        _step_registry = FeatureStepRegistry()
+        _step_registry = get_default_registry()
         _step_registry.load_entry_points()
     return _step_registry
 

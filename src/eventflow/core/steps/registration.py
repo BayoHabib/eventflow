@@ -13,6 +13,11 @@ from eventflow.core.steps.context import (
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,
 )
+from eventflow.core.steps.domain import (
+    GridDomainCoverageStep,
+    SpatialDomainMaskConfig,
+    SpatialDomainMaskStep,
+)
 from eventflow.core.steps.point_process import (
     ConditionalIntensityConfig,
     ConditionalIntensityStep,
@@ -92,6 +97,19 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         registry: The FeatureStepRegistry to register steps with.
     """
     # Spatial steps
+    registry.register(
+        "spatial_domain_mask",
+        SpatialDomainMaskStep,
+        tags=["spatial"],
+        description="Annotate or filter caller-defined spatial-domain membership",
+        config_model=SpatialDomainMaskConfig,
+    )
+    registry.register(
+        "grid_domain_coverage",
+        GridDomainCoverageStep,
+        tags=["spatial"],
+        description="Join geometric domain coverage from a supplied cell grid",
+    )
     registry.register(
         "transform_crs",
         TransformCRSStep,
