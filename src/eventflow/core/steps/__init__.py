@@ -14,6 +14,7 @@ from eventflow.core.steps.context import (
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,
 )
+from eventflow.core.steps.domain import GridDomainCoverageStep, SpatialDomainMaskStep
 from eventflow.core.steps.point_process import (
     ConditionalIntensityStep,
     ContinuousInterEventStep,
@@ -89,6 +90,8 @@ __all__ = [
     "TemporalContextJoinStep",
     # Spatial steps
     "AssignToGridStep",
+    "SpatialDomainMaskStep",
+    "GridDomainCoverageStep",
     "AssignToZonesStep",
     "ComputeDistancesStep",
     "GetisOrdStep",

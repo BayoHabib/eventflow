@@ -1,6 +1,7 @@
 """Core module containing generic, dataset-agnostic primitives."""
 
 from eventflow.core.context.sources import BaseContextSource
+from eventflow.core.domain import SpatialDomain, annotate_grid_coverage
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.output_adapters import BaseOutputAdapter
 from eventflow.core.registry import (
@@ -23,6 +24,8 @@ from eventflow.core.schema import (
 
 __all__ = [
     "EventFrame",
+    "SpatialDomain",
+    "annotate_grid_coverage",
     "EventSchema",
     "ContextSchema",
     "EventMetadata",
