@@ -10,6 +10,17 @@ A generic library for preparing and transforming spatio-temporal datasets before
 
 ## Overview
 
+Pipelines support [asynchronous execution](docs/async_execution.md):
+
+```python
+prepared = await pipeline.run_async(events)
+table = await prepared.collect_async()
+```
+
+Existing steps are offloaded from the asyncio event loop, and `AsyncStep` supports
+native async operations. Ordered execution, error propagation and cancellation
+cleanup are documented alongside the synchronous API.
+
 The core supplies reusable spatial and temporal treatments. Dataset adapters and
 recipes assemble them for a particular source; interpretation, statistical analysis,
 and model training consume the prepared outputs downstream.

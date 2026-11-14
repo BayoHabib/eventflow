@@ -1,9 +1,12 @@
 """Pipeline orchestration for composable transformations."""
 
+import asyncio
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
+from eventflow.core._async import run_blocking
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.schema import EventMetadata, EventSchema
 from eventflow.core.utils import get_logger
@@ -24,9 +27,26 @@ class Step(ABC):
         """Execute the step transformation and return the modified frame."""
         raise NotImplementedError
 
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Run an existing synchronous step outside the asyncio event loop."""
+        return await run_blocking(self.run, event_frame)
+
     def __repr__(self) -> str:
         """String representation of the step."""
         return f"{self.__class__.__name__}()"
+
+
+class AsyncStep(Step):
+    """Base for native async operations such as asynchronous reference-data I/O."""
+
+    def run(self, event_frame: EventFrame) -> EventFrame:
+        """Require the asynchronous entry point rather than creating a hidden loop."""
+        raise TypeError("AsyncStep requires 'await pipeline.run_async(...)'")
+
+    @abstractmethod
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Return the transformed frame using native async/await operations."""
+        raise NotImplementedError
 
 
 class Pipeline:
@@ -44,6 +64,7 @@ class Pipeline:
             steps: List of Step instances to apply in sequence
         """
         self.steps = steps
+        self._execution_lock = threading.Lock()
         self._last_schema: EventSchema | None = None
         self._last_metadata: EventMetadata | None = None
         logger.info(
@@ -60,33 +81,41 @@ class Pipeline:
         Returns:
             Transformed EventFrame after all steps
         """
-        logger.info(f"Starting pipeline execution with {len(self.steps)} steps")
+        self._acquire_execution()
+        try:
+            return self._run(event_frame)
+        finally:
+            self._execution_lock.release()
+
+    def _acquire_execution(self) -> None:
+        """Prevent overlapping use of steps and mutable per-pipeline metadata."""
+        if not self._execution_lock.acquire(blocking=False):
+            raise RuntimeError("Pipeline is already running; use separate instances concurrently")
+
+    def _validate_result(self, previous: EventFrame, result: EventFrame, step_name: str) -> None:
+        """Apply the same type and schema checks to sync and async execution."""
+        if not isinstance(result, EventFrame):
+            raise TypeError(
+                f"Step {step_name} returned {type(result).__name__} instead of EventFrame"
+            )
+        issues = previous.schema.compatibility_issues(result.schema)
+        if issues:
+            issue_summary = "; ".join(issues)
+            raise ValueError(f"Step {step_name} produced incompatible schema: {issue_summary}")
+
+    def _run(self, event_frame: EventFrame) -> EventFrame:
+        steps = tuple(self.steps)
+        logger.info(f"Starting pipeline execution with {len(steps)} steps")
         current = event_frame
         self._last_schema = event_frame.schema
         self._last_metadata = event_frame.metadata
 
-        for i, step in enumerate(self.steps, 1):
+        for i, step in enumerate(steps, 1):
             step_name = step.__class__.__name__
-            logger.info(f"Step {i}/{len(self.steps)}: Executing {step_name}")
+            logger.info(f"Step {i}/{len(steps)}: Executing {step_name}")
             try:
-                previous_schema = current.schema
                 result = step.run(current)
-                if not isinstance(result, EventFrame):
-                    raise TypeError(
-                        f"Step {step_name} returned {type(result).__name__} instead of EventFrame"
-                    )
-
-                issues = previous_schema.compatibility_issues(result.schema)
-                if issues:
-                    issue_summary = "; ".join(issues)
-                    logger.error(
-                        "Step %s produced an incompatible schema: %s",
-                        step_name,
-                        issue_summary,
-                    )
-                    raise ValueError(
-                        f"Step {step_name} produced incompatible schema: {issue_summary}"
-                    )
+                self._validate_result(current, result, step_name)
 
                 current = result
                 self._last_schema = current.schema
@@ -97,13 +126,42 @@ class Pipeline:
                     sorted(mod.value for mod in current.schema.output_modalities),
                 )
             except Exception as e:
-                logger.error(f"Step {i}/{len(self.steps)}: {step_name} failed with error: {e}")
+                logger.error(f"Step {i}/{len(steps)}: {step_name} failed with error: {e}")
                 raise
 
         logger.info("Pipeline execution completed successfully")
         self._last_schema = current.schema
         self._last_metadata = current.metadata
         return current
+
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Await ordered sync/async steps without blocking the event loop.
+
+        One invocation owns a Pipeline instance at a time. Cancellation drains
+        an active synchronous worker before releasing this ownership. The
+        returned EventFrame remains lazy; use its collect_async() to materialize.
+        """
+        self._acquire_execution()
+        try:
+            steps = tuple(self.steps)
+            current = event_frame
+            self._last_schema, self._last_metadata = current.schema, current.metadata
+            for i, step in enumerate(steps, 1):
+                step_name = step.__class__.__name__
+                logger.info("Async step %s/%s: %s", i, len(steps), step_name)
+                result = await step.run_async(current)
+                self._validate_result(current, result, step_name)
+                current = result
+                self._last_schema, self._last_metadata = current.schema, current.metadata
+            return current
+        except asyncio.CancelledError:
+            logger.info("Asynchronous pipeline execution cancelled")
+            raise
+        except Exception:
+            logger.exception("Asynchronous pipeline execution failed")
+            raise
+        finally:
+            self._execution_lock.release()
 
     def add_step(self, step: Step) -> "Pipeline":
         """
@@ -115,7 +173,11 @@ class Pipeline:
         Returns:
             Self for chaining
         """
-        self.steps.append(step)
+        self._acquire_execution()
+        try:
+            self.steps.append(step)
+        finally:
+            self._execution_lock.release()
         return self
 
     def __repr__(self) -> str:
@@ -199,6 +261,12 @@ class ConditionalStep(Step):
         else:
             return event_frame
 
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Offload the predicate and await only the selected branch."""
+        condition = await run_blocking(self.condition, event_frame)
+        branch = self.if_true if condition else self.if_false
+        return await branch.run_async(event_frame) if branch is not None else event_frame
+
     def __repr__(self) -> str:
         """String representation."""
         return f"ConditionalStep({self.if_true} | {self.if_false})"
@@ -237,6 +305,13 @@ class ParallelSteps(Step):
         for step in self.steps:
             result = step.run(result)
 
+        return result
+
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Preserve this legacy wrapper's sequential transformation semantics."""
+        result = event_frame
+        for step in tuple(self.steps):
+            result = await step.run_async(result)
         return result
 
     def __repr__(self) -> str:

@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 
+from eventflow.core._async import run_blocking
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.pipeline import Pipeline
 from eventflow.core.registry import StepRegistry
@@ -70,3 +71,8 @@ class BaseRecipe(ABC):
     def __repr__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(name={self.name})"
+
+    async def run_async(self, event_frame: EventFrame) -> EventFrame:
+        """Build the configured pipeline off-loop and await its execution."""
+        pipeline = await run_blocking(self.get_pipeline)
+        return await pipeline.run_async(event_frame)
