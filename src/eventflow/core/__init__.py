@@ -1,5 +1,6 @@
 """Core module containing generic, dataset-agnostic primitives."""
 
+from eventflow.core.cadence import CadenceRule
 from eventflow.core.context.sources import BaseContextSource
 from eventflow.core.domain import SpatialDomain, annotate_grid_coverage
 from eventflow.core.event_frame import EventFrame
@@ -26,6 +27,7 @@ from eventflow.core.schema import (
 __all__ = [
     "EventFrame",
     "ObservationPanel",
+    "CadenceRule",
     "SpatialDomain",
     "annotate_grid_coverage",
     "EventSchema",

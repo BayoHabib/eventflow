@@ -143,8 +143,9 @@ bounded batch preparation. Explicit intervals, observed/missing/outside status,
 and optional exposure/rates are implemented for point-event counts. These
 foundations still require work:
 
-1. Automatic coverage inference, reference-file loading, and continuous-measure
-   support-aware resampling. Geometric coverage is not population or observation
+1. [Independent quality declarations and explicit cadence checks](observation_quality.md)
+   are implemented. Automatic coverage inference, reference-file loading, and
+   continuous-measure support-aware resampling remain separate work. Geometric coverage is not population or observation
    exposure; completeness still needs a caller-supplied declaration.
 2. Separate phenomenon time and data-availability time, bitemporal joins, and
    fit/transform boundaries for learned preprocessing. A backward join alone
