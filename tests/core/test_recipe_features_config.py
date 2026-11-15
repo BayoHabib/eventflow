@@ -1,8 +1,13 @@
-"""Tests for honest recipe configuration (phase 0).
+"""Tests for honest recipe configuration (phases 0 and 1).
 
 Phase-0 rule: no configuration key may be silently ignored. An unknown key
 or a declared-but-unimplemented feature must raise a blocking error, with a
 message that lists the supported keys.
+
+Phase 1 implements the previously declared-but-unimplemented keys
+(categorical_features, aggregation_windows) plus panel completion, EWMA,
+cyclical encodings, spatial lag, trend, recency and zero features — with
+cross-key rules enforced by FeatureConfig.require_implemented().
 """
 
 from __future__ import annotations
@@ -44,6 +49,15 @@ def test_features_defaults_are_honest() -> None:
     assert config.features.categorical_features == []
     assert config.features.aggregation_windows == []
     assert config.features.steps is None
+    assert config.features.complete_panel is False
+    assert config.features.panel_min_periods == 1
+    assert config.features.categorical_top_n == 10
+    assert config.features.ewma_halflife_days is None
+    assert config.features.cyclical_encoding is False
+    assert config.features.spatial_lag is False
+    assert config.features.trend is False
+    assert config.features.recency is False
+    assert config.features.zero_features is False
 
 
 def test_features_steps_still_accepted() -> None:
@@ -52,26 +66,31 @@ def test_features_steps_still_accepted() -> None:
     assert config.features.steps == ["double"]
 
 
-def test_categorical_features_raise_in_chicago_recipe() -> None:
-    """Re-adding categorical_features must fail, not be silently dropped."""
+def test_categorical_features_build_in_chicago_recipe() -> None:
+    """Phase 1: categorical_features are implemented (CategoryCountsStep)."""
     config = RecipeConfig(
         **_base_recipe_kwargs(),
         features={"categorical_features": ["primary_type"]},
     )
     recipe = get_recipe("chicago_crime", "chicago_crime_v1", config)
-    with pytest.raises(ValueError, match="categorical_features.*not implemented"):
-        recipe.build_pipeline()
+    pipeline = recipe.build_pipeline()
+    step_names = [type(s).__name__ for s in pipeline.steps]
+    assert "CategoryCountsStep" in step_names
+    # Category counts run before the aggregation that consumes them.
+    assert step_names.index("CategoryCountsStep") < step_names.index("ChicagoCountStep")
 
 
-def test_aggregation_windows_raise_in_chicago_recipe() -> None:
-    """Re-adding aggregation_windows must fail, not be silently dropped."""
+def test_aggregation_windows_build_in_chicago_recipe() -> None:
+    """Phase 1: aggregation_windows drive lags and rolling means."""
     config = RecipeConfig(
         **_base_recipe_kwargs(),
         features={"aggregation_windows": ["7d"]},
     )
     recipe = get_recipe("chicago_crime", "chicago_crime_v1", config)
-    with pytest.raises(ValueError, match="aggregation_windows.*not implemented"):
-        recipe.build_pipeline()
+    pipeline = recipe.build_pipeline()
+    step_names = [type(s).__name__ for s in pipeline.steps]
+    assert "TemporalLagStep" in step_names
+    assert "MovingAverageStep" in step_names
 
 
 def test_count_features_false_rejected_by_chicago_recipe() -> None:
@@ -154,22 +173,100 @@ def test_enabled_context_raises_in_chicago_recipe() -> None:
 
 
 def test_shipped_chicago_yaml_loads_and_builds() -> None:
-    """The shipped YAML (after phase-0 cleanup) loads and builds cleanly."""
+    """The shipped YAML (phase 1: full feature set) loads and builds cleanly."""
     repo_root = Path(__file__).resolve().parents[2]
     with open(repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml") as f:
         raw = yaml.safe_load(f)
-    assert "categorical_features" not in raw.get("features", {})
-    assert "aggregation_windows" not in raw.get("features", {})
+    features = raw.get("features", {})
+    assert features["categorical_features"] == ["primary_type", "location_description"]
+    assert features["aggregation_windows"] == ["1d", "7d", "30d"]
+    assert features["complete_panel"] is True
     assert "partition_by" not in raw.get("output", {})
     assert "buffer_m" not in raw.get("grid", {})
     config = RecipeConfig(**raw)
     recipe = get_recipe("chicago_crime", "chicago_crime_v1", config)
     pipeline = recipe.build_pipeline()
-    assert len(pipeline.steps) == 5
+    assert [type(s).__name__ for s in pipeline.steps] == [
+        "TransformCRSStep",
+        "AssignToGridStep",
+        "TimeBinsStep",
+        "CategoryCountsStep",
+        "ChicagoCountStep",
+        "CompletePanelStep",
+        "ExtractTemporalComponentsStep",
+        "CalendarEncodingStep",
+        "TemporalLagStep",
+        "MovingAverageStep",
+        "EWMAMeanStep",
+        "TrendStep",
+        "FillNullStep",
+        "SpatialLagStep",
+        "TimeSinceLastEventStep",
+        "BurstinessStep",
+        "ZeroFeaturesStep",
+    ]
 
 
-def test_require_implemented_lists_both_features() -> None:
-    """FeatureConfig.require_implemented names the offending declaration."""
-    config = FeatureConfig(categorical_features=["primary_type"], aggregation_windows=["1d"])
-    with pytest.raises(ValueError, match="categorical_features"):
+def test_require_implemented_accepts_full_phase1_config() -> None:
+    """A coherent full phase-1 declaration passes require_implemented."""
+    config = FeatureConfig(
+        categorical_features=["primary_type"],
+        aggregation_windows=["1d", "7d", "30d"],
+        complete_panel=True,
+        ewma_halflife_days=7.0,
+        cyclical_encoding=True,
+        spatial_lag=True,
+        trend=True,
+        recency=True,
+        zero_features=True,
+    )
+    config.require_implemented("test_recipe")  # must not raise
+
+
+def test_require_implemented_spatial_lag_needs_windows() -> None:
+    """A spatial lag without windows has no lagged count to lag spatially."""
+    config = FeatureConfig(spatial_lag=True)
+    with pytest.raises(ValueError, match="spatial_lag needs aggregation_windows"):
         config.require_implemented("test_recipe")
+
+
+def test_require_implemented_trend_needs_two_windows() -> None:
+    """A trend is a ratio of two rolling means — one window is not enough."""
+    config = FeatureConfig(trend=True, aggregation_windows=["7d"])
+    with pytest.raises(ValueError, match="trend needs at least two aggregation_windows"):
+        config.require_implemented("test_recipe")
+
+
+def test_require_implemented_recency_needs_complete_panel() -> None:
+    """Trailing recency statistics over a sparse panel would be misleading."""
+    config = FeatureConfig(recency=True)
+    with pytest.raises(ValueError, match="recency.*complete_panel"):
+        config.require_implemented("test_recipe")
+
+
+def test_require_implemented_zero_features_needs_complete_panel() -> None:
+    """Zero features are only defined on a completed panel."""
+    config = FeatureConfig(zero_features=True)
+    with pytest.raises(ValueError, match="zero_features.*complete_panel"):
+        config.require_implemented("test_recipe")
+
+
+def test_require_implemented_ewma_needs_complete_panel() -> None:
+    """An EWMA over a sparse panel would mix observed and absent bins."""
+    config = FeatureConfig(ewma_halflife_days=7.0)
+    with pytest.raises(ValueError, match="ewma_halflife_days.*complete_panel"):
+        config.require_implemented("test_recipe")
+
+
+def test_non_whole_day_window_rejected() -> None:
+    """Aggregation windows must be whole days (lags/rolling use days)."""
+    with pytest.raises(ValidationError, match="whole number of days"):
+        FeatureConfig(aggregation_windows=["12h"])
+    with pytest.raises(ValidationError, match="Unknown aggregation window"):
+        FeatureConfig(aggregation_windows=["1month"])
+
+
+def test_window_days_sorted_and_deduplicated() -> None:
+    """window_days() returns ascending, de-duplicated whole days."""
+    config = FeatureConfig(aggregation_windows=["30d", "1d", "7d", "7d"])
+    assert config.window_days() == [1, 7, 30]

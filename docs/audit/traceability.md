@@ -10,9 +10,10 @@ coverage 81 % (5,145 statements, 1,000 missed); ruff, black, mypy clean.
 
 **How to read this file:** one row per objective. "Statut audit" is the
 2026-11-15 verdict; "Statut phase 0" is the status after the phase-0
-changes, updated only where phase 0 produced a verifiable change. Statuses
-are never inflated: a fix to the *honesty* of an objective does not count
-as implementing the objective itself.
+changes, updated only where phase 0 produced a verifiable change. The
+"Après phase 1" section at the bottom records the phase-1 movements the
+same way. Statuses are never inflated: a fix to the *honesty* of an
+objective does not count as implementing the objective itself.
 
 | # | Objectif | Statut audit | Statut phase 0 | Preuve phase 0 |
 |---|---|---|---|---|
@@ -51,3 +52,46 @@ Sur la base du tableau ci-dessus : **15 atteints, 7 partiels, 5 non atteints,
 1 non vérifiable** (contre 15 / 6 / 6 / 1 à l'audit). Le seul mouvement de
 statut est l'objectif 17 (non atteint → partiel). Les objectifs 21–24
 restent volontairement non atteints : ils sont hors phase 0.
+
+## Après phase 1
+
+**Mesuré par `make audit`, 2026-11-15** (voir `audit/phase-1/manifest.json`) :
+verdict PASS (5/5 : ruff, black, mypy, pytest, replay), 705 tests passés,
+couverture 84 % (5 718 statements, 912 missed) ; replay Chicago T1 2024 :
+1 908 088 lignes (5 242 cellules × 364 bins), somme `count` = 60 235,
+1 851 597 lignes à zéro explicite, toutes `observation_status ==
+"observed"`, aucun `count` null. Lag, moyenne glissante, lag spatial,
+EWMA, tendance et entropie vérifiés à la main contre les données brutes.
+
+- **Objectif 27 — Non atteint → Partiel.** Les features catégorielles et
+  les fenêtres 1d/7d/30d sont implémentées génériquement
+  (`CategoryCountsStep`, `TemporalLagStep`, `MovingAverageStep`), avec la
+  complétion du panel en zéros explicites (`CompletePanelStep`) et les
+  groupes dépendants (EWMA, tendance, lag spatial queen du lag le plus
+  court, temps depuis le dernier événement, burstiness, features zéro,
+  encodages cycliques) — voir `docs/design-notes/phase1-causality.md` et
+  `docs/design-notes/chicago-declared-features.md`. Il reste partiel car
+  le partitionnement de sortie (`output.partition_by`) n'est toujours pas
+  implémenté (toujours une erreur bloquante dans la CLI).
+- **Objectif 13 — Atteint (chiffres mis à jour).** Recette rejouée par
+  `make audit` : 1 908 088 lignes, somme `count` = 60 235 (voir
+  `audit/phase-1/replay_chicago.json`). Le panel creux de 56 491 lignes
+  est remplacé par le panel complété ; la somme est inchangée.
+- **Objectif 17 — Partiel (précisé).** `aggregate_by_category`
+  (EXPERIMENTAL, sans garde-fou) est supplanté par le
+  `CategoryCountsStep` testé (top-N + bucket `"other"`, noms assainis,
+  parts nulles quand le total est 0, entropie de Shannon) —
+  `tests/core/test_categorical_steps.py` (27 tests, références calculées
+  à la main + non-fuite). `compute_ratios` reste corrigé et testé.
+- **Objectif 25 — Atteint (maintenu).** Couverture ≥ 82 % maintenue après
+  phase 1 (voir `audit/phase-1/manifest.json`).
+- **Objectif 26 — Partiel (précisé).** Chaque groupe de features a des
+  tests de référence calculés à la main et des tests de non-fuite
+  (causal cutoff) ; le replay Chicago est un test d'intégration sur
+  données réelles (58,7 s, lag spatial ~19 s sur 364 snapshots).
+  Hypothesis toujours inutilisé, aucun test de performance dédié.
+
+**Compteur après phase 1 : 15 atteints, 8 partiels, 4 non atteints,
+1 non vérifiable.** Le seul mouvement de statut est l'objectif 27
+(non atteint → partiel). Les objectifs 21–24 restent volontairement non
+atteints : ils sont hors phase 1.

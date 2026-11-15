@@ -1,7 +1,8 @@
 # Declared Chicago features — removed in phase 0, planned for phase 1
 
 **Date:** 2026-11-15 (phase 0)
-**Status:** design note — nothing here is implemented yet.
+**Status:** design note — items 1–2 implemented in phase 1 (see below);
+item 3 (`partition_by`) still open.
 
 ## What was removed, and why
 
@@ -26,9 +27,12 @@ four keys from the YAML instead of letting the recipe keep promising them.
   `core/schema.py`, `extra="forbid"` + a validator that lists the supported
   keys). An unknown key raises a `ValidationError` at load time.
 - `categorical_features` and `aggregation_windows` are **declared** in
-  `FeatureConfig` (so the intent stays typed) but **not implemented**: any
-  recipe that reads them must call `FeatureConfig.require_implemented()`,
-  which raises a blocking `ValueError` when the lists are non-empty.
+  `FeatureConfig` (so the intent stays typed). Phase 1 **implements** them
+  (`CategoryCountsStep`, `TemporalLagStep`, `MovingAverageStep` plus the
+  dependent groups — see "What phase 1 implemented" below), and
+  `FeatureConfig.require_implemented()` now enforces the cross-key rules
+  (spatial lag / trend need windows; recency / zero features / EWMA need
+  a completed panel) instead of rejecting the keys outright.
   `chicago_crime_v1.build_pipeline()` calls it.
 - `grid.buffer_m != 0` and any `context.*.enabled: true` raise a blocking
   error in `build_pipeline()`; a non-empty `output.partition_by` raises a
@@ -37,29 +41,48 @@ four keys from the YAML instead of letting the recipe keep promising them.
 - Tests: `tests/core/test_recipe_features_config.py` proves each of these
   rejections, and that the shipped YAML loads and runs.
 
-## What phase 1 must implement (generic, not Chicago-specific)
+## What phase 1 implemented (generic, not Chicago-specific)
 
-All three features are generic concepts — any `EventFrame` with a timestamp,
-a grid/cell id and an optional category column. They must land in the core
-(`core/steps/` + registry), never as Chicago-only code:
+Items 1–2 below landed in phase 1 as generic core steps
+(`core/steps/` + registry), wired into `chicago_crime_v1` via the typed
+`FeatureConfig` and the shipped YAML. Item 3 is still open.
 
-1. **Counts by category** (`categorical_features`): one column per distinct
-   category value, per cell/bin (e.g. `count_THEFT`). Guardrails needed
-   before implementing: top-N / minimum-frequency threshold, because
-   cardinality explodes for columns like `location_description`; column
-   names must be escaped; the output schema/provenance must be updated
-   (the old `core/features.py::aggregate_by_category` did none of this —
-   see the phase-0 triage in `docs/audit/known-limitations.md`).
-2. **Rolling windows** (`aggregation_windows`): rolling mean/sum of `count`
-   over 1d/7d/30d per cell. With 6 h bins, 1d = 4 bins, 7d = 28, 30d = 120.
-   **Prerequisite, to decide first:** the cell×bin panel must be completed
-   with observed zeros before any rolling window is computed — on the
-   Chicago output only 2.96 % of the 1,908,088 possible pairs are observed,
-   so rolling over the sparse output would be misleading. Window alignment
-   (trailing/causal only, never centred) and minimum-periods policy must
-   be explicit.
-3. **Partitioned output** (`partition_by`): write one file per partition
-   value (year/month) instead of a single file. Smaller scope, CLI-level.
+1. **Counts by category** (`categorical_features`): **implemented** —
+   `CategoryCountsStep` (`core/steps/categorical.py`) produces
+   `count_<col>_<value>`, `share_<col>_<value>` and `<col>_entropy` per
+   (unit, time), with a top-N guardrail (`categorical_top_n`, default 10)
+   plus an `"other"` bucket; category values are sanitized to valid column
+   names (runs of non-alphanumerics → `_`); nulls fall into `"other"`.
+   Chicago: `primary_type` (30 values) and `location_description`
+   (113 values) → 11 count columns each at top_n=10; the `"other"` bucket
+   is genuinely used (12,149 rows for `location_description`). Shares are
+   null when the bin total is 0; entropy is Shannon (`-sum(p·ln p)`), null
+   when the total is 0. `ChicagoCountStep` carries the columns through the
+   aggregation with `first()` (they are already per cell/bin), and
+   `CompletePanelStep` zero-fills the `count_*` columns for generated
+   pairs (`value_prefixes=["count"]`) while shares/entropy stay null there.
+2. **Rolling windows** (`aggregation_windows`): **implemented** — the
+   panel is completed with explicit zeros first (`CompletePanelStep`,
+   opt-in per recipe, `min_periods`), then `TemporalLagStep` (exact
+   elapsed lags, duration mode) and `MovingAverageStep` (trailing,
+   `closed="left"`) run over the declared windows (Chicago: 1d/7d/30d →
+   `count_lag_1/7/30`, `count_ma_1/7/30`). With 6 h bins, 1d = 4 bins,
+   7d = 28, 30d = 120. Phase 1 also adds the dependent groups on top of
+   the same windows: EWMA (`EWMAMeanStep`, `count_ewma_7d`), trend
+   (`TrendStep`, `count_ma_1_vs_count_ma_30`), queen spatial lag of the
+   shortest lag (`SpatialLagStep`, `count_lag_1_spatial_lag`), time since
+   last event + burstiness (`count_time_since_last_d`,
+   `count_burstiness_28d`), zero features (`count_active_7d`,
+   `count_share_nonzero_28d`), and cyclical calendar encodings
+   (`CalendarEncodingStep`, `hour_sin/cos`, `dow_sin/cos`,
+   `month_sin/cos`). Causality convention and window policies:
+   `docs/design-notes/phase1-causality.md`. Replay proof (Q1 2024):
+   1,908,088 rows, sum `count` = 60,235, hand-verified lag / rolling
+   mean / spatial lag / EWMA / trend / entropy (see `make audit`,
+   `audit/phase-1/replay_chicago.json`).
+3. **Partitioned output** (`partition_by`): **still open** — write one
+   file per partition value (year/month) instead of a single file.
+   Smaller scope, CLI-level. Still a blocking error in the CLI.
 
 ## Other keys that are still silently ignored (known, not fixed in phase 0)
 

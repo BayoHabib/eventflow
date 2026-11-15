@@ -7,6 +7,10 @@ It can be called explicitly or discovered via entry points.
 from __future__ import annotations
 
 from eventflow.core.registry import FeatureStepRegistry
+from eventflow.core.steps.categorical import (
+    CategoryCountsConfig,
+    CategoryCountsStep,
+)
 from eventflow.core.steps.context import (
     ContextAggregationStep,
     SpatialContextJoinStep,
@@ -18,7 +22,20 @@ from eventflow.core.steps.domain import (
     SpatialDomainMaskConfig,
     SpatialDomainMaskStep,
 )
+from eventflow.core.steps.dynamics import (
+    BurstinessConfig,
+    BurstinessStep,
+    EWMAMeanConfig,
+    EWMAMeanStep,
+    TimeSinceLastEventConfig,
+    TimeSinceLastEventStep,
+    TrendConfig,
+    TrendStep,
+    ZeroFeaturesConfig,
+    ZeroFeaturesStep,
+)
 from eventflow.core.steps.observation import ObservationPanelStep
+from eventflow.core.steps.panel import CompletePanelConfig, CompletePanelStep
 from eventflow.core.steps.point_process import (
     ConditionalIntensityConfig,
     ConditionalIntensityStep,
@@ -76,6 +93,8 @@ from eventflow.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsConfig,
     ExtractTemporalComponentsStep,
+    FillNullConfig,
+    FillNullStep,
     InterArrivalConfig,
     InterArrivalStep,
     MovingAverageConfig,
@@ -102,6 +121,20 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         ObservationPanelStep,
         tags=["spatial", "temporal"],
         description="Count raw records on explicit observation support and preserve unknown totals",
+    )
+    registry.register(
+        "complete_panel",
+        CompletePanelStep,
+        tags=["spatial", "temporal"],
+        description="Complete a sparse unit x time panel with explicit zeros inside the observation support",
+        config_model=CompletePanelConfig,
+    )
+    registry.register(
+        "category_counts",
+        CategoryCountsStep,
+        tags=["spatial", "temporal"],
+        description="Per-category counts, shares and entropy per (unit, time) group",
+        config_model=CategoryCountsConfig,
     )
     # Spatial steps
     registry.register(
@@ -236,6 +269,54 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         tags=["temporal"],
         description="Encode calendar features (cyclical, one-hot, ordinal)",
         config_model=CalendarEncodingConfig,
+    )
+
+    registry.register(
+        "fill_null",
+        FillNullStep,
+        tags=["temporal"],
+        description="Fill nulls in named columns with an explicit constant",
+        config_model=FillNullConfig,
+    )
+
+    registry.register(
+        "ewma_mean",
+        EWMAMeanStep,
+        tags=["temporal"],
+        description="Exponentially weighted mean of value columns (includes current bin)",
+        config_model=EWMAMeanConfig,
+    )
+
+    registry.register(
+        "trend",
+        TrendStep,
+        tags=["temporal"],
+        description="Ratio of two rolling-mean columns (null on zero denominator)",
+        config_model=TrendConfig,
+    )
+
+    registry.register(
+        "time_since_last_event",
+        TimeSinceLastEventStep,
+        tags=["temporal"],
+        description="Days since the most recent bin with value > 0",
+        config_model=TimeSinceLastEventConfig,
+    )
+
+    registry.register(
+        "burstiness",
+        BurstinessStep,
+        tags=["temporal"],
+        description="Rolling coefficient of variation of counts (closed-left window)",
+        config_model=BurstinessConfig,
+    )
+
+    registry.register(
+        "zero_features",
+        ZeroFeaturesStep,
+        tags=["temporal"],
+        description="Activity flag and share of nonzero bins (windows include current bin)",
+        config_model=ZeroFeaturesConfig,
     )
 
     registry.register(

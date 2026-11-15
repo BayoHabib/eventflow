@@ -45,7 +45,10 @@ rewriting the README.
 - `core/features.py`: `aggregate_by_category`, `encode_categorical`,
   `normalize_features` — see the module docstring for each limitation.
   `normalize_features` computes statistics over the whole frame (leakage
-  risk, no fit/transform split).
+  risk, no fit/transform split). Note (phase 1): `aggregate_by_category`
+  is superseded for recipes by the tested `CategoryCountsStep`
+  (`core/steps/categorical.py`, top-N + `"other"` bucket); the utility
+  itself stays EXPERIMENTAL.
 - `tracking/mlflow_tracker.py`: no test against a real MLflow backend.
 - `datasets/chicago_crime/context/` (weather, events, demographics):
   unwired, untested sources.
@@ -67,7 +70,11 @@ rewriting the README.
 ## Phase-0 scope reminders
 
 - Phase 0 implemented **no new features**: no lags, no rolling windows,
-  no per-category counts. Those are phase 1
-  (`docs/design-notes/chicago-declared-features.md`).
+  no per-category counts. Phase 1 delivered them
+  (`docs/design-notes/chicago-declared-features.md`,
+  `docs/design-notes/phase1-causality.md`): lags, rolling means, EWMA,
+  trend, queen spatial lag, per-category counts/shares/entropy, time
+  since last event, burstiness, zero features, cyclical encodings — all
+  on the explicit-zero completed panel.
 - Phase 0 started **none** of the production TODO items: adapter aliases,
   FastAPI, PyPI, Docker (audit objectives 21–24).

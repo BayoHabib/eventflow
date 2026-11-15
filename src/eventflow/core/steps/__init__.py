@@ -8,6 +8,7 @@ All steps in this package:
 - Support builder patterns for multi-window configurations
 """
 
+from eventflow.core.steps.categorical import CategoryCountsStep
 from eventflow.core.steps.context import (
     ContextAggregationStep,
     SpatialContextJoinStep,
@@ -15,7 +16,15 @@ from eventflow.core.steps.context import (
     TemporalContextJoinStep,
 )
 from eventflow.core.steps.domain import GridDomainCoverageStep, SpatialDomainMaskStep
+from eventflow.core.steps.dynamics import (
+    BurstinessStep,
+    EWMAMeanStep,
+    TimeSinceLastEventStep,
+    TrendStep,
+    ZeroFeaturesStep,
+)
 from eventflow.core.steps.observation import ObservationPanelStep
+from eventflow.core.steps.panel import CompletePanelStep
 from eventflow.core.steps.point_process import (
     ConditionalIntensityStep,
     ContinuousInterEventStep,
@@ -56,6 +65,7 @@ from eventflow.core.steps.streaming import (
 from eventflow.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
+    FillNullStep,
     InterArrivalStep,
     MovingAverageStep,
     RecencyWeightStep,
@@ -90,6 +100,9 @@ __all__ = [
     "SpatialContextJoinStep",
     "SpatioTemporalContextJoinStep",
     "TemporalContextJoinStep",
+    # Category steps
+    "CategoryCountsStep",
+    "CompletePanelStep",
     # Spatial steps
     "AssignToGridStep",
     "SpatialDomainMaskStep",
@@ -104,12 +117,18 @@ __all__ = [
     "TransformCRSStep",
     # Temporal steps
     "CalendarEncodingStep",
+    "BurstinessStep",
+    "EWMAMeanStep",
     "ExtractTemporalComponentsStep",
+    "FillNullStep",
     "InterArrivalStep",
     "MovingAverageStep",
     "RecencyWeightStep",
     "TemporalLagStep",
     "TimeBinsStep",
+    "TimeSinceLastEventStep",
+    "TrendStep",
+    "ZeroFeaturesStep",
     # Point-process steps
     "ConditionalIntensityStep",
     "ContinuousInterEventStep",

@@ -10,6 +10,7 @@ from eventflow.core.schema import EventMetadata, EventSchema
 from eventflow.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
+    FillNullStep,
     InterArrivalStep,
     MovingAverageStep,
     RecencyWeightStep,
@@ -435,3 +436,39 @@ class TestInterArrivalStep:
         assert "inter_arrival_seconds" in df.columns
         # First event of each category should have null
         # (this tests the grouping behavior)
+
+
+class TestFillNullStep:
+    """FillNullStep replaces nulls with an explicit constant (phase 1)."""
+
+    def test_fills_nulls_and_keeps_dtype(self, sample_event_frame: EventFrame) -> None:
+        """Nulls are replaced; non-null values and dtypes are untouched."""
+        frame = sample_event_frame.with_columns(
+            pl.when(pl.col("value") > 20).then(None).otherwise(pl.col("value")).alias("value")
+        )
+        result = FillNullStep(value_cols=["value"], fill_value=0).run(frame)
+        df = result.collect()
+        assert df["value"].to_list() == [10.0, 20.0, 15.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        assert df["value"].dtype == pl.Float64
+
+    def test_fills_int_column_without_upcasting(self, sample_event_frame: EventFrame) -> None:
+        """An integer column filled with an int stays integer."""
+        frame = sample_event_frame.with_columns(pl.lit(None, dtype=pl.Int64).alias("lagged"))
+        result = FillNullStep(value_cols=["lagged"], fill_value=0).run(frame)
+        df = result.collect()
+        assert df["lagged"].to_list() == [0] * 8
+        assert df["lagged"].dtype == pl.Int64
+
+    def test_rejects_missing_and_non_numeric_columns(self, sample_event_frame: EventFrame) -> None:
+        """Unknown or non-numeric columns fail loudly, never silently."""
+        with pytest.raises(ValueError, match="missing from the frame"):
+            FillNullStep(value_cols=["nope"]).run(sample_event_frame)
+        with pytest.raises(ValueError, match="must be numeric"):
+            FillNullStep(value_cols=["category"]).run(sample_event_frame)
+
+    def test_rejects_empty_cols_and_bad_fill_value(self) -> None:
+        """Empty value_cols and non-numeric fill values fail at construction."""
+        with pytest.raises(ValueError, match="must not be empty"):
+            FillNullStep(value_cols=[])
+        with pytest.raises(ValueError, match="must be a number"):
+            FillNullStep(value_cols=["value"], fill_value="zero")  # type: ignore[arg-type]

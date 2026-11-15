@@ -10,7 +10,7 @@ so the audit is only a partial verification).
 
 Usage (from the repository root, inside the dev venv):
 
-    python scripts/audit.py [--out audit/phase-0] [--data-root DIR] [--skip-replay]
+    python scripts/audit.py [--out audit/phase-1] [--data-root DIR] [--skip-replay]
     make audit
 
 The audit runs the code from this tree (``PYTHONPATH=<root>/src``) so it
@@ -163,6 +163,9 @@ def replay_chicago(out_dir: Path, data_root: Path, env: dict[str, str]) -> tuple
         return False, report
     df = pl.read_parquet(output)
     total = int(df["count"].sum())
+    n_cells = df["grid_id"].n_unique()
+    n_bins = df["date"].n_unique()
+    zero_rows = df.filter(pl.col("count") == 0)
     report.update(
         {
             "rows": df.height,
@@ -171,12 +174,27 @@ def replay_chicago(out_dir: Path, data_root: Path, env: dict[str, str]) -> tuple
             "sum_count": total,
             "count_min": int(df["count"].min()),
             "count_max": int(df["count"].max()),
-            "expected_rows": 56491,
+            "n_cells": n_cells,
+            "n_bins": n_bins,
+            "n_zero_rows": zero_rows.height,
+            # Phase 1: the panel is completed with explicit zeros inside the
+            # observation support (5,242 cells x 364 bins). The sparse
+            # 56,491-row panel is gone; the count sum is unchanged.
+            "expected_rows": 1908088,
             "expected_sum_count": 60235,
+            "expected_cells": 5242,
+            "expected_bins": 364,
             "checks": {
-                "rows_match": df.height == 56491,
+                "rows_match": df.height == 1908088,
                 "sum_count_match": total == 60235,
-                "no_zeros": int(df["count"].min()) >= 1,
+                "cells_match": n_cells == 5242,
+                "bins_match": n_bins == 364,
+                # Explicit zeros exist (the old no_zeros check is inverted:
+                # a completed panel MUST contain zero rows).
+                "explicit_zeros": int(df["count"].min()) == 0,
+                # Every zero row is in-support ("observed"), never missing.
+                "zeros_are_observed": bool((zero_rows["observation_status"] == "observed").all()),
+                "no_null_counts": df["count"].null_count() == 0,
             },
         }
     )
@@ -188,7 +206,7 @@ def replay_chicago(out_dir: Path, data_root: Path, env: dict[str, str]) -> tuple
 def main() -> int:
     """Run the audit and write the evidence pack."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="audit/phase-0", help="Evidence pack directory")
+    parser.add_argument("--out", default="audit/phase-1", help="Evidence pack directory")
     parser.add_argument(
         "--data-root",
         default=str(DEFAULT_DATA_ROOT),
@@ -249,7 +267,7 @@ def main() -> int:
 
     verdict = compute_verdict(results)
     manifest = {
-        "audit": "eventflow phase-0 audit",
+        "audit": "eventflow phase-1 audit",
         "started_utc": started.isoformat(),
         "finished_utc": datetime.now(timezone.utc).isoformat(),
         "repo_root": str(ROOT),

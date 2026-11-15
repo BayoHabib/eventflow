@@ -16,14 +16,39 @@ temporal:
     - is_weekend
 
 # Feature engineering
-# Phase 0 (2026-11-15): this section lists ONLY what the recipe produces.
-# categorical_features and aggregation_windows used to be declared here
-# but were silently ignored by build_pipeline(); they were removed and
-# moved to docs/design-notes/chicago-declared-features.md (planned phase 1).
-# Re-adding them now raises a blocking error instead of being dropped.
+# Phase 1 (2026-11-15): every key below is produced by the recipe — see
+# docs/design-notes/phase1-causality.md for the causality convention
+# (a feature row at bin t predicts bin t + 1) and the panel design.
+# The panel is completed with explicit zeros before any window or lag;
+# categorical counts are top-10 + "other" per column (cardinality guardrail).
 features:
   # Basic counts per grid cell and time bin (implemented by ChicagoCountStep)
   count_features: true
+  # Per-category counts, shares and Shannon entropy (CategoryCountsStep)
+  categorical_features:
+    - primary_type
+    - location_description
+  categorical_top_n: 10
+  # Rolling windows: lags count_lag_<d> and rolling means count_ma_<d>
+  aggregation_windows:
+    - "1d"
+    - "7d"
+    - "30d"
+  # Explicit-zero panel completion (5,242 cells x 364 bins = 1,908,088 rows)
+  complete_panel: true
+  panel_min_periods: 1
+  # Exponentially weighted mean of count (count_ewma_7d)
+  ewma_halflife_days: 7.0
+  # Sin/cos calendar encodings for hour, day-of-week, month
+  cyclical_encoding: true
+  # Queen spatial lag of the shortest lag (count_lag_1_spatial_lag)
+  spatial_lag: true
+  # Ratio of shortest to longest rolling mean (count_ma_1_vs_count_ma_30)
+  trend: true
+  # Time since last event + burstiness over trailing 28 d
+  recency: true
+  # Active flag (7 d) + share of non-zero bins (28 d)
+  zero_features: true
 
 # Context enrichment (disabled for baseline).
 # Enabling any source raises a blocking error: context enrichment is not
