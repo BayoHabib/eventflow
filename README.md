@@ -13,6 +13,10 @@ A generic library for preparing and transforming spatio-temporal datasets before
 Numerical definitions, migration notes and remaining foundations are described in
 [preprocessing contracts](docs/preprocessing_contracts.md).
 
+[Observation panels](docs/observation_panel.md) count point-event records on
+explicit space-time support while keeping observed zeros, missing totals and
+outside-domain rows distinct, with optional exposure, rates and log offsets.
+
 Pipelines support [asynchronous execution](docs/async_execution.md):
 
 ```python
