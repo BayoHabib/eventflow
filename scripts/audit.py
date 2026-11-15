@@ -5,7 +5,8 @@ Runs, in order: ruff, black --check, mypy, the full test suite with
 coverage (which includes the README Quick Start examples), and a replay
 of the Chicago recipe on real data when a data directory is available.
 Writes an evidence pack (logs, coverage, manifest, replay report) and
-prints a single PASS/FAIL verdict.
+prints a single verdict: PASS, FAIL, or INCOMPLETE (a check was skipped,
+so the audit is only a partial verification).
 
 Usage (from the repository root, inside the dev venv):
 
@@ -14,7 +15,9 @@ Usage (from the repository root, inside the dev venv):
 
 The audit runs the code from this tree (``PYTHONPATH=<root>/src``) so it
 never depends on whichever copy happens to be installed in the venv.
-Exit code is 0 only if every step passes.
+Exit code is 0 only if every step passes, 1 if a step fails, and 2 if a
+step was skipped: a skipped check is unverified, never passed, so a
+partial verification must not exit 0.
 """
 
 from __future__ import annotations
@@ -34,6 +37,39 @@ DEFAULT_DATA_ROOT = Path.home() / "workspace" / "eventflow-eda" / "data" / "raw"
 # Files that define the audited tree (used for the copy fingerprint).
 FINGERPRINT_DIRS = ("src", "tests", "configs", "scripts")
 FINGERPRINT_FILES = ("pyproject.toml", "README.md", "TODO.md", "GETTING_STARTED.md")
+
+
+# Per-check statuses recorded in the manifest and printed in the summary.
+# A check that did not run is SKIP, never PASS: no printed or
+# machine-readable field may claim a skipped check passed (issue #31).
+STATUS_PASS = "PASS"
+STATUS_FAIL = "FAIL"
+STATUS_SKIP = "SKIP"
+
+
+def status_of(ok: bool) -> str:
+    """Map a step's boolean outcome to a per-check status string."""
+    return STATUS_PASS if ok else STATUS_FAIL
+
+
+def compute_verdict(results: dict[str, str]) -> str:
+    """Overall verdict from per-check statuses.
+
+    FAIL if any check failed; INCOMPLETE if any check was skipped and
+    none failed (a skipped check is unverified, never passed); PASS
+    only if every check actually ran and passed.
+    """
+    if STATUS_FAIL in results.values():
+        return "FAIL"
+    if STATUS_SKIP in results.values():
+        return "INCOMPLETE"
+    return "PASS"
+
+
+def exit_code_for_verdict(verdict: str) -> int:
+    """Exit code for a verdict: 0 fully verified, 1 a check failed,
+    2 a check was skipped (partial verification)."""
+    return {"PASS": 0, "FAIL": 1, "INCOMPLETE": 2}[verdict]
 
 
 def sha256_file(path: Path) -> str:
@@ -170,15 +206,16 @@ def main() -> int:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
 
-    results: dict[str, bool] = {}
-    results["ruff"] = run_step(
-        "ruff", [sys.executable, "-m", "ruff", "check", "src", "tests"], out_dir, env
-    )[0]
-    results["black"] = run_step(
+    results: dict[str, str] = {}
+    ok, _ = run_step("ruff", [sys.executable, "-m", "ruff", "check", "src", "tests"], out_dir, env)
+    results["ruff"] = status_of(ok)
+    ok, _ = run_step(
         "black", [sys.executable, "-m", "black", "--check", "src", "tests"], out_dir, env
-    )[0]
-    results["mypy"] = run_step("mypy", [sys.executable, "-m", "mypy", "src"], out_dir, env)[0]
-    results["pytest"] = run_step(
+    )
+    results["black"] = status_of(ok)
+    ok, _ = run_step("mypy", [sys.executable, "-m", "mypy", "src"], out_dir, env)
+    results["mypy"] = status_of(ok)
+    ok, _ = run_step(
         "pytest",
         [
             sys.executable,
@@ -195,20 +232,22 @@ def main() -> int:
         ],
         out_dir,
         env,
-    )[0]
+    )
+    results["pytest"] = status_of(ok)
 
     data_root = Path(args.data_root)
     replay: dict = {"ran": False, "checks_ok": True, "reason": None}
     if args.skip_replay:
         replay["reason"] = "skipped by --skip-replay"
-        results["replay_chicago"] = True  # skipped steps do not fail the audit
+        results["replay_chicago"] = STATUS_SKIP
     elif not data_root.exists():
         replay["reason"] = f"data directory not found: {data_root}"
-        results["replay_chicago"] = True
+        results["replay_chicago"] = STATUS_SKIP
     else:
         ok, replay = replay_chicago(out_dir, data_root, env)
-        results["replay_chicago"] = ok
+        results["replay_chicago"] = status_of(ok)
 
+    verdict = compute_verdict(results)
     manifest = {
         "audit": "eventflow phase-0 audit",
         "started_utc": started.isoformat(),
@@ -226,16 +265,16 @@ def main() -> int:
         },
         "results": results,
         "replay": replay,
-        "verdict": "PASS" if all(results.values()) else "FAIL",
+        "verdict": verdict,
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    (out_dir / "verdict.txt").write_text(manifest["verdict"] + "\n", encoding="utf-8")
+    (out_dir / "verdict.txt").write_text(verdict + "\n", encoding="utf-8")
 
     print()
-    for name, ok in results.items():
-        print(f"  {name}: {'PASS' if ok else 'FAIL'}")
-    print(f"VERDICT: {manifest['verdict']}  (evidence pack: {out_dir})")
-    return 0 if manifest["verdict"] == "PASS" else 1
+    for name, status in results.items():
+        print(f"  {name}: {status}")
+    print(f"VERDICT: {verdict}  (evidence pack: {out_dir})")
+    return exit_code_for_verdict(verdict)
 
 
 if __name__ == "__main__":
