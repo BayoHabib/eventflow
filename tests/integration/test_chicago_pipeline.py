@@ -387,6 +387,61 @@ def test_legacy_weekend_flags_are_iso_correct() -> None:
     assert result["is_weekend"].to_list() == [False, True, True]
 
 
+def test_legacy_extract_rejects_unknown_component() -> None:
+    """An unknown component must fail loudly, not be silently omitted (issue #33)."""
+    frame = geographic_frame().with_lazy_frame(
+        pl.DataFrame(
+            {
+                "date": [datetime(2024, 1, 5), datetime(2024, 1, 6), datetime(2024, 1, 7)],
+                "latitude": [41.8] * 3,
+                "longitude": [-87.7] * 3,
+            }
+        ).lazy()
+    )
+    with pytest.raises(ValueError, match="hour_of_dya"):
+        extract_temporal_components(frame, ["hour_of_dya"])
+
+
+def test_legacy_extract_rejects_unimplemented_is_holiday() -> None:
+    """is_holiday was documented but never implemented; requesting it must fail (issue #33)."""
+    frame = geographic_frame().with_lazy_frame(
+        pl.DataFrame(
+            {
+                "date": [datetime(2024, 1, 5), datetime(2024, 1, 6), datetime(2024, 1, 7)],
+                "latitude": [41.8] * 3,
+                "longitude": [-87.7] * 3,
+            }
+        ).lazy()
+    )
+    with pytest.raises(ValueError, match="is_holiday"):
+        extract_temporal_components(frame, ["is_holiday"])
+
+
+def test_legacy_extract_produces_all_supported_components() -> None:
+    """Positive control: every component the legacy function implements is produced."""
+    frame = geographic_frame().with_lazy_frame(
+        pl.DataFrame(
+            {
+                "date": [datetime(2024, 1, 5), datetime(2024, 1, 6), datetime(2024, 1, 7)],
+                "latitude": [41.8] * 3,
+                "longitude": [-87.7] * 3,
+            }
+        ).lazy()
+    )
+    components = [
+        "hour_of_day",
+        "day_of_week",
+        "day_of_month",
+        "day_of_year",
+        "month",
+        "year",
+        "is_weekend",
+    ]
+    result = extract_temporal_components(frame, components).collect()
+    for component in components:
+        assert component in result.columns
+
+
 def test_recipe_preserves_support_for_queen_lag():
     from eventflow.core.steps.spatial import SpatialLagStep
 

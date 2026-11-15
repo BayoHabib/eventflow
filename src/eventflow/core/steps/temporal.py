@@ -97,9 +97,22 @@ class CalendarEncodingConfig(BaseModel):
     encoding_type: Literal["cyclical", "onehot", "ordinal"] = Field(
         default="cyclical", description="Type of calendar encoding"
     )
+    # Keep in sync with CALENDAR_ENCODING_COMPONENTS below: the Literal
+    # guards the registry path, the frozenset guards direct construction.
     components: list[Literal["hour", "day_of_week", "day_of_month", "month", "week_of_year"]] = (
         Field(default=["hour", "day_of_week", "month"], description="Components to encode")
     )
+
+
+# Components CalendarEncodingStep actually encodes. This is the single
+# source of truth shared by the Literal in CalendarEncodingConfig above
+# and the step's __init__ validation: the registry path is already safe
+# (pydantic rejects values outside the Literal before the step is
+# built), but direct construction bypasses it, so the step must
+# validate too (issue #33).
+CALENDAR_ENCODING_COMPONENTS = frozenset(
+    {"hour", "day_of_week", "day_of_month", "month", "week_of_year"}
+)
 
 
 class InterArrivalConfig(BaseModel):
@@ -556,6 +569,19 @@ class CalendarEncodingStep(Step):
     ) -> None:
         self.encoding_type = encoding_type
         self.components = list(components) if components else ["hour", "day_of_week", "month"]
+        # An unknown component must fail here, not be silently skipped by
+        # run(): the branches below only produce the supported components,
+        # so a typo such as "hour_of_dya" used to yield neither the
+        # misspelled nor the intended column (issue #33). Validated against
+        # the same set as the Literal in CalendarEncodingConfig.
+        unknown = sorted(set(self.components) - CALENDAR_ENCODING_COMPONENTS)
+        if unknown:
+            raise ValueError(
+                "Unknown calendar component(s): " + ", ".join(unknown) + ". "
+                "Supported calendar components: "
+                + ", ".join(sorted(CALENDAR_ENCODING_COMPONENTS))
+                + "."
+            )
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """Execute calendar encoding."""

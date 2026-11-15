@@ -339,6 +339,40 @@ class TestCalendarEncodingStep:
         assert "hour_ordinal" in df.columns
         assert "dow_ordinal" in df.columns
 
+    def test_rejects_unknown_component_cyclical(self, sample_event_frame: EventFrame) -> None:
+        """An unknown component must fail at construction, not be silently skipped (issue #33)."""
+        with pytest.raises(ValueError, match="hour_of_dya"):
+            CalendarEncodingStep(encoding_type="cyclical", components=["hour_of_dya"])
+
+    def test_rejects_unknown_component_ordinal(self, sample_event_frame: EventFrame) -> None:
+        """An unknown component must fail at construction in the ordinal branch too (issue #33)."""
+        with pytest.raises(ValueError, match="quater"):
+            CalendarEncodingStep(encoding_type="ordinal", components=["quater"])
+
+    def test_rejects_unknown_component_among_valid_ones(
+        self, sample_event_frame: EventFrame
+    ) -> None:
+        """The error must name the unknown component and list the supported ones (issue #33)."""
+        with pytest.raises(ValueError, match="quater"):
+            CalendarEncodingStep(encoding_type="cyclical", components=["hour", "quater"])
+        with pytest.raises(ValueError, match="Supported calendar components"):
+            CalendarEncodingStep(encoding_type="cyclical", components=["hour", "quater"])
+
+    def test_cyclical_day_of_month_and_week_of_year_encoding(
+        self, sample_event_frame: EventFrame
+    ) -> None:
+        """Positive control: the remaining supported components still encode."""
+        step = CalendarEncodingStep(
+            encoding_type="cyclical", components=["day_of_month", "week_of_year"]
+        )
+        result = step.run(sample_event_frame)
+
+        df = result.collect()
+        assert "dom_sin" in df.columns
+        assert "dom_cos" in df.columns
+        assert "woy_sin" in df.columns
+        assert "woy_cos" in df.columns
+
     def test_sin_cos_range(self, sample_event_frame: EventFrame) -> None:
         """Test that sin/cos values are in [-1, 1] range."""
         step = CalendarEncodingStep(encoding_type="cyclical", components=["hour"])
