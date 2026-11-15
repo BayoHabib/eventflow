@@ -235,6 +235,26 @@ _RECIPE_KEYS = frozenset({"dataset", "recipe", "grid", "temporal", "features", "
 _GRID_KEYS = frozenset({"size_m", "origin"})
 _TEMPORAL_KEYS = frozenset({"time_bin", "components"})
 
+# Supported values for ``TemporalConfig.components`` — the single source of
+# truth for the temporal-component vocabulary. ``ExtractTemporalComponentsStep``
+# (``core/steps/temporal.py``) validates against the same set, so a typo is
+# rejected identically at config parse time and at direct step construction.
+# (The Literal in ``ExtractTemporalComponentsConfig`` lists the same names for
+# registry-built steps.)
+TEMPORAL_COMPONENTS = frozenset(
+    {
+        "hour_of_day",
+        "day_of_week",
+        "day_of_month",
+        "day_of_year",
+        "month",
+        "year",
+        "week_of_year",
+        "quarter",
+        "is_weekend",
+    }
+)
+
 
 class GridConfig(BaseModel):
     """
@@ -275,6 +295,18 @@ class TemporalConfig(BaseModel):
 
     time_bin: str = "6h"
     components: list[str] = Field(default_factory=lambda: ["hour_of_day", "day_of_week"])
+
+    @field_validator("components")
+    @classmethod
+    def _reject_unknown_components(cls, components: list[str]) -> list[str]:
+        """Reject unknown component values with the supported list."""
+        unknown = sorted(set(components) - TEMPORAL_COMPONENTS)
+        if unknown:
+            raise ValueError(
+                "Unknown temporal component(s): " + ", ".join(unknown) + ". "
+                "Supported temporal components: " + ", ".join(sorted(TEMPORAL_COMPONENTS)) + "."
+            )
+        return components
 
     @model_validator(mode="before")
     @classmethod
