@@ -234,7 +234,9 @@ def test_cli_validate_accepts_shipped_chicago_config() -> None:
     config_path = repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml"
     result = CliRunner().invoke(app, ["validate", "--config", str(config_path)])
     assert result.exit_code == 0, result.output
-    assert "pipeline builds: 5 steps" in result.output
+    # Phase 1: the shipped YAML enables the full feature set (17 steps),
+    # up from the 5-step phase-0 pipeline.
+    assert "pipeline builds: 17 steps" in result.output
 
 
 def test_cli_validate_rejects_unknown_configured_step(tmp_path: Path) -> None:

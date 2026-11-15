@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from eventflow.core._time import duration_seconds
+
 
 class OutputModality(str, Enum):
     """Enumerates supported output modalities for derived artefacts."""
@@ -229,7 +231,21 @@ class DatasetConfig(BaseModel):
 StepDefinition = str | tuple[str, Mapping[str, Any] | None] | Mapping[str, Any]
 
 _FEATURE_KEYS = frozenset(
-    {"steps", "count_features", "categorical_features", "aggregation_windows"}
+    {
+        "steps",
+        "count_features",
+        "categorical_features",
+        "categorical_top_n",
+        "aggregation_windows",
+        "complete_panel",
+        "panel_min_periods",
+        "ewma_halflife_days",
+        "cyclical_encoding",
+        "spatial_lag",
+        "trend",
+        "recency",
+        "zero_features",
+    }
 )
 _RECIPE_KEYS = frozenset({"dataset", "recipe", "grid", "temporal", "features", "context", "output"})
 _GRID_KEYS = frozenset({"size_m", "origin"})
@@ -330,22 +346,44 @@ class FeatureConfig(BaseModel):
     is rejected with a message listing the supported keys — a typo or a
     leftover declaration must never be silently ignored again.
 
-    Keys and their status in phase 0:
+    Keys and their status in phase 1:
 
     - ``steps``: registry step definitions (``recipes/base.py``). When set,
       they replace the recipe's built-in pipeline.
     - ``count_features``: per-cell/bin counts. Implemented by the Chicago
       recipe (``ChicagoCountStep``); ``False`` is rejected there because
       the recipe always counts.
-    - ``categorical_features``: per-category counts (e.g. ``count_THEFT``).
-      Declared here so the intent is typed, but **not implemented by any
-      recipe in phase 0** — a recipe raises a blocking error if the list
-      is non-empty. Planned for phase 1 (see
-      ``docs/design-notes/chicago-declared-features.md``).
+    - ``categorical_features``: per-category counts (e.g.
+      ``count_primary_type_THEFT``), shares and Shannon entropy, via
+      ``CategoryCountsStep``. Top-N guardrail: ``categorical_top_n``
+      (default 10) plus an "other" bucket. Implemented in phase 1.
     - ``aggregation_windows``: rolling windows such as ``"1d"`` / ``"7d"`` /
-      ``"30d"``. Same status as ``categorical_features``: typed, not
-      implemented in phase 0, blocking error if non-empty. Planned for
-      phase 1.
+      ``"30d"``. Each window drives a rolling mean (``count_ma_<days>``,
+      trailing, closed-left) and a lag (``count_lag_<days>``, exact
+      elapsed). Values must be whole days. Implemented in phase 1.
+    - ``complete_panel``: complete the sparse unit x time panel with
+      explicit zeros inside the observation support before any window or
+      lag (``CompletePanelStep``). Opt-in; ``False`` by default.
+    - ``panel_min_periods``: a unit enters the completed panel only if
+      observed in at least this many distinct bins (default 1).
+    - ``ewma_halflife_days``: exponentially weighted mean of ``count``
+      (``count_ewma_<halflife>d``). ``None`` (default) disables it.
+    - ``cyclical_encoding``: sin/cos calendar encodings
+      (``CalendarEncodingStep``, cyclical) for hour, day-of-week, month.
+    - ``spatial_lag``: queen-adjacency spatial lag of the shortest-window
+      lagged count (``count_lag_<shortest>_spatial_lag``). Requires
+      ``aggregation_windows``.
+    - ``trend``: ratio of the shortest-window rolling mean to the
+      longest-window one (``count_ma_<short>_vs_count_ma_<long>``).
+      Requires at least two ``aggregation_windows``.
+    - ``recency``: time since the last bin with ``count > 0`` and
+      burstiness over a trailing 28 d window. Requires ``complete_panel``.
+    - ``zero_features``: activity flag over trailing 7 d and share of
+      non-zero bins over trailing 28 d. Requires ``complete_panel``.
+
+    Cross-key rules are enforced by ``require_implemented`` (called by
+    recipes at pipeline-build time) so an incoherent combination fails
+    loudly instead of producing a silently wrong feature set.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -353,7 +391,16 @@ class FeatureConfig(BaseModel):
     steps: list[StepDefinition] | None = None
     count_features: bool = True
     categorical_features: list[str] = Field(default_factory=list)
+    categorical_top_n: int = Field(default=10, ge=1)
     aggregation_windows: list[str] = Field(default_factory=list)
+    complete_panel: bool = False
+    panel_min_periods: int = Field(default=1, ge=1)
+    ewma_halflife_days: float | None = Field(default=None, gt=0)
+    cyclical_encoding: bool = False
+    spatial_lag: bool = False
+    trend: bool = False
+    recency: bool = False
+    zero_features: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -368,26 +415,59 @@ class FeatureConfig(BaseModel):
                 )
         return data
 
+    @field_validator("aggregation_windows")
+    @classmethod
+    def _validate_windows_are_whole_days(cls, windows: list[str]) -> list[str]:
+        """Aggregation windows must be whole days (lags/rolling use days)."""
+        for window in windows:
+            try:
+                seconds = duration_seconds(window)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unknown aggregation window {window!r}: durations such as "
+                    "'1d' / '7d' / '30d' are supported"
+                ) from exc
+            if seconds % 86400 != 0:
+                raise ValueError(f"Aggregation window {window!r} must be a whole number of days")
+        return windows
+
+    def window_days(self) -> list[int]:
+        """Aggregation windows as whole days, ascending, de-duplicated."""
+        return sorted({int(duration_seconds(w) // 86400) for w in self.aggregation_windows})
+
     def require_implemented(self, recipe_name: str) -> None:
         """
-        Raise a blocking error for declared-but-unimplemented features.
+        Raise a blocking error for incoherent feature combinations.
 
         Recipes call this at pipeline-build time so a declared feature is
-        never silently dropped from the output.
+        never silently dropped or silently miscomputed. Phase 1 implements
+        every key in this section; what is still rejected here is a
+        combination whose inputs do not exist.
         """
-        if self.categorical_features:
+        if self.spatial_lag and not self.aggregation_windows:
             raise ValueError(
-                f"{recipe_name}: categorical_features "
-                f"{self.categorical_features} declared but not implemented "
-                "(planned for phase 1, see "
-                "docs/design-notes/chicago-declared-features.md)"
+                f"{recipe_name}: spatial_lag needs aggregation_windows "
+                "(the spatial lag is computed on the lagged count)"
             )
-        if self.aggregation_windows:
+        if self.trend and len(self.aggregation_windows) < 2:
             raise ValueError(
-                f"{recipe_name}: aggregation_windows "
-                f"{self.aggregation_windows} declared but not implemented "
-                "(planned for phase 1, see "
-                "docs/design-notes/chicago-declared-features.md)"
+                f"{recipe_name}: trend needs at least two aggregation_windows "
+                "(ratio of the shortest-window mean to the longest-window mean)"
+            )
+        needs_panel = [
+            name
+            for name, enabled in (
+                ("recency", self.recency),
+                ("zero_features", self.zero_features),
+                ("ewma_halflife_days", self.ewma_halflife_days is not None),
+            )
+            if enabled
+        ]
+        if needs_panel and not self.complete_panel:
+            raise ValueError(
+                f"{recipe_name}: {', '.join(needs_panel)} cannot be used "
+                "without complete_panel (trailing statistics over a sparse "
+                "panel would be misleading)"
             )
 
 

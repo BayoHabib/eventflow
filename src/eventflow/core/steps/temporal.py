@@ -115,6 +115,13 @@ CALENDAR_ENCODING_COMPONENTS = frozenset(
 )
 
 
+class FillNullConfig(BaseModel):
+    """Configuration for null filling step."""
+
+    value_cols: list[str] = Field(..., description="Columns to fill nulls in")
+    fill_value: float | int = Field(default=0, description="Constant value used to replace nulls")
+
+
 class InterArrivalConfig(BaseModel):
     """Configuration for inter-arrival time step."""
 
@@ -729,6 +736,72 @@ class CalendarEncodingStep(Step):
             {"source_step": "CalendarEncodingStep", "type": "ordinal"},
             provenance=provenance,
         )
+
+
+class FillNullStep(Step):
+    """Fill nulls in named columns with a constant.
+
+    This is a boundary policy made explicit, not a silent imputation:
+    the caller must state why a null means this value. The phase-1 use
+    case is a lag before the panel start (for example ``count_lag_1`` on
+    the first day): no data exists before the observation window, so the
+    lagged count is treated as 0 — "no events recorded". The step never
+    invents a value for a null that has another meaning; use it only
+    where the null's meaning is exactly "absent, counts as the fill
+    value".
+
+    Inputs:
+        - value_cols to fill nulls in
+
+    Outputs:
+        - the same columns, with nulls replaced by ``fill_value``
+    """
+
+    def __init__(
+        self,
+        value_cols: Sequence[str],
+        fill_value: float | int = 0,
+    ) -> None:
+        self.value_cols = list(value_cols)
+        self.fill_value = fill_value
+        if not self.value_cols:
+            raise ValueError("value_cols must not be empty")
+        if len(set(self.value_cols)) != len(self.value_cols):
+            raise ValueError("value_cols must not contain duplicates")
+        if not isinstance(fill_value, (int, float)) or isinstance(fill_value, bool):
+            raise ValueError("fill_value must be a number")
+
+    def run(self, event_frame: EventFrame) -> EventFrame:
+        """Execute null filling."""
+        schema = event_frame.lazy_frame.collect_schema()
+        for value_col in self.value_cols:
+            if value_col not in schema:
+                raise ValueError(f"Column {value_col!r} is missing from the frame")
+            if not schema[value_col].is_numeric():
+                raise ValueError(f"Column {value_col!r} must be numeric, got {schema[value_col]}")
+        lf = event_frame.lazy_frame.with_columns(
+            [
+                pl.col(value_col)
+                .fill_null(pl.lit(self.fill_value).cast(schema[value_col]))
+                .alias(value_col)
+                for value_col in self.value_cols
+            ]
+        )
+        result = event_frame.with_lazy_frame(lf)
+        for value_col in self.value_cols:
+            provenance = FeatureProvenance(
+                produced_by="FillNullStep",
+                inputs=[value_col],
+                tags={"temporal"},
+                description=f"Nulls in {value_col} filled with {self.fill_value}",
+                metadata={"fill_value": self.fill_value},
+            )
+            result = result.register_feature(
+                value_col,
+                {"source_step": "FillNullStep", "fill_value": self.fill_value},
+                provenance=provenance,
+            )
+        return result
 
 
 class InterArrivalStep(Step):
