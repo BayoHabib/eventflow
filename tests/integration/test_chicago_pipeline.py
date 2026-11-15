@@ -234,9 +234,34 @@ def test_cli_validate_accepts_shipped_chicago_config() -> None:
     config_path = repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml"
     result = CliRunner().invoke(app, ["validate", "--config", str(config_path)])
     assert result.exit_code == 0, result.output
-    # Phase 1: the shipped YAML enables the full feature set (17 steps),
-    # up from the 5-step phase-0 pipeline.
-    assert "pipeline builds: 17 steps" in result.output
+    # Phase 2: the shipped YAML enables the full feature set (21 steps),
+    # up from the 17-step phase-1 pipeline.
+    assert "pipeline builds: 21 steps" in result.output
+
+
+def test_phase2_time_steps_use_populated_timestamp_column() -> None:
+    """Phase 2 replay bug: time-dependent steps must use "date", not "time_bin".
+
+    On the completed panel the pre-completion "time_bin" column is null
+    on every generated (explicit-zero) row, while the schema timestamp
+    column "date" holds the bin datetime on all rows. Building the
+    near-repeat and STKDE steps on "time_bin" silently computed their
+    windows over the sparse observed-bins-only series (wrong values,
+    no error) — e.g. count_nr_r1_7d = 60 instead of 50 on the busiest
+    cell at 2024-02-17 12:00. The recipe must wire the populated
+    timestamp column into both steps (and the steps themselves now
+    reject a null time column, see their validation tests).
+    """
+    from eventflow.core.steps.density import SpaceTimeKernelDensityStep
+    from eventflow.core.steps.near_repeat import NearRepeatStep
+
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml"
+    config = RecipeConfig(**yaml.safe_load(config_path.read_text(encoding="utf-8")))
+    steps = get_recipe("chicago_crime", "chicago_crime_v1", config).get_pipeline().steps
+    by_type = {type(step): step for step in steps}
+    assert by_type[NearRepeatStep].time_col == "date"
+    assert by_type[SpaceTimeKernelDensityStep].time_col == "date"
 
 
 def test_cli_validate_rejects_unknown_configured_step(tmp_path: Path) -> None:

@@ -11,8 +11,8 @@ coverage 81 % (5,145 statements, 1,000 missed); ruff, black, mypy clean.
 **How to read this file:** one row per objective. "Statut audit" is the
 2026-11-15 verdict; "Statut phase 0" is the status after the phase-0
 changes, updated only where phase 0 produced a verifiable change. The
-"Après phase 1" section at the bottom records the phase-1 movements the
-same way. Statuses are never inflated: a fix to the *honesty* of an
+"Après phase 1" and "Après phase 2" sections at the bottom record the
+phase-1 and phase-2 movements the same way. Statuses are never inflated: a fix to the *honesty* of an
 objective does not count as implementing the objective itself.
 
 | # | Objectif | Statut audit | Statut phase 0 | Preuve phase 0 |
@@ -95,3 +95,51 @@ EWMA, tendance et entropie vérifiés à la main contre les données brutes.
 1 non vérifiable.** Le seul mouvement de statut est l'objectif 27
 (non atteint → partiel). Les objectifs 21–24 restent volontairement non
 atteints : ils sont hors phase 1.
+
+## Après phase 2
+
+**Mesuré par `make audit`, 2026-11-15** (voir `audit/phase-2/manifest.json`) :
+verdict PASS (5/5 : ruff, black, mypy, pytest, replay), 838 tests passés,
+couverture 85 % (6 261 statements, 944 missed) ; replay Chicago T1 2024 :
+1 908 088 lignes × 90 colonnes (5 242 cellules × 364 bins), somme `count`
+= 60 235, 1 851 597 lignes à zéro explicite, aucun `count` null. Les 4
+nouvelles familles (lag spatial multi-échelle anneaux 1/2/3, KDE
+gaussienne, STKDE, near-repeat, Hawkes simplifié) sont vérifiées à la main
+contre les données brutes (14 contrôles, cellule la plus chargée
+1930/1195, bin 2024-02-17 12:00 — voir
+`docs/design-notes/phase2-spacetime-v2.md`).
+
+- **Objectif 13 — Atteint (chiffres mis à jour).** Recette rejouée par
+  `make audit` : 1 908 088 lignes × 90 colonnes, somme `count` = 60 235
+  (voir `audit/phase-2/replay_chicago.json`). Le lag spatial queen
+  mono-échelle est remplacé par le lag multi-échelle (anneaux 1/2/3) ;
+  la valeur de référence `count_lag_1_spatial_lag` = 0.375 est conservée
+  pour l'anneau 1.
+- **Objectif 25 — Atteint (maintenu).** Couverture 85 % après phase 2
+  (voir `audit/phase-2/manifest.json`).
+- **Objectif 26 — Partiel (précisé).** Chaque nouvelle famille a des
+  tests de référence calculés à la main / par brute-force indépendante
+  et des tests de non-fuite (causal cutoff) ; les timings par étape du
+  replay Chicago sont mesurés et publiés dans la note de conception
+  phase 2 (lag multi-échelle ~21 s, KDE ~25 s, STKDE ~29 s,
+  near-repeat ~17 s, total ~98 s). Hypothesis toujours inutilisé,
+  aucun test de performance dédié.
+- **Objectif 2 — Atteint (précisé).** La bibliothèque reste paresseuse
+  par défaut, avec une exception documentée : les étapes à grosses
+  jointures (KDE/STKDE, near-repeat, lag spatial vectorisé) collectent
+  leur résultat avant de retourner, une jointure géante paresseuse
+  ayant tué le replay par OOM à deux reprises (voir
+  `docs/audit/known-limitations.md`).
+- **Objectif 6 — Atteint (chiffres mis à jour).** 838 tests, 85 % de
+  couverture (mesurés par `make audit`).
+- **Objectif 27 — Partiel (inchangé).** Le partitionnement de sortie
+  (`output.partition_by`) n'est toujours pas implémenté (toujours une
+  erreur bloquante dans la CLI). Les features espace-temps de la phase 2
+  ne relèvent pas du libellé de cet objectif.
+
+**Compteur après phase 2 : 15 atteints, 8 partiels, 4 non atteints,
+1 non vérifiable** — inchangé. Aucun mouvement de statut en phase 2 :
+le travail approfondit des objectifs déjà atteints ou partiels
+(lag spatial vectorisé, features espace-temps, garde-fous de validation)
+sans en clore de nouveaux. Les objectifs 21–24 restent volontairement
+non atteints : ils sont hors phase 2.
