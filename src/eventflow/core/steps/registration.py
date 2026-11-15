@@ -18,6 +18,7 @@ from eventflow.core.steps.domain import (
     SpatialDomainMaskConfig,
     SpatialDomainMaskStep,
 )
+from eventflow.core.steps.observation import ObservationPanelStep
 from eventflow.core.steps.point_process import (
     ConditionalIntensityConfig,
     ConditionalIntensityStep,
@@ -96,6 +97,12 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
     Args:
         registry: The FeatureStepRegistry to register steps with.
     """
+    registry.register(
+        "observation_panel",
+        ObservationPanelStep,
+        tags=["spatial", "temporal"],
+        description="Count raw records on explicit observation support and preserve unknown totals",
+    )
     # Spatial steps
     registry.register(
         "spatial_domain_mask",

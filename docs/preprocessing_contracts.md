@@ -138,12 +138,14 @@ but can use future data. Tolerances use Polars duration syntax.
 
 ## Remaining foundations
 
-The numerical corrections above are a first implementation milestone. The
-following are not supplied by these changes:
+The numerical contracts and [observation panels](observation_panel.md) cover
+bounded batch preparation. Explicit intervals, observed/missing/outside status,
+and optional exposure/rates are implemented for point-event counts. These
+foundations still require work:
 
-1. An observation panel linking spatial units, time intervals, observation
-   status and exposure. Observed zero, missing, and outside-domain must remain
-   distinct. Geometric coverage is not population or observation exposure.
+1. Automatic coverage inference, reference-file loading, and continuous-measure
+   support-aware resampling. Geometric coverage is not population or observation
+   exposure; completeness still needs a caller-supplied declaration.
 2. Separate phenomenon time and data-availability time, bitemporal joins, and
    fit/transform boundaries for learned preprocessing. A backward join alone
    does not guarantee that a value was available at prediction time.

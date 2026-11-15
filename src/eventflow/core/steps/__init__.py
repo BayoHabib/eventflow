@@ -15,6 +15,7 @@ from eventflow.core.steps.context import (
     TemporalContextJoinStep,
 )
 from eventflow.core.steps.domain import GridDomainCoverageStep, SpatialDomainMaskStep
+from eventflow.core.steps.observation import ObservationPanelStep
 from eventflow.core.steps.point_process import (
     ConditionalIntensityStep,
     ContinuousInterEventStep,
@@ -82,6 +83,7 @@ from eventflow.core.steps.validation import (
 __all__ = [
     # Registration
     "get_default_registry",
+    "ObservationPanelStep",
     "register_builtin_steps",
     # Context join steps
     "ContextAggregationStep",
