@@ -228,6 +228,55 @@ def test_cli_discovers_chicago_recipe() -> None:
     assert "chicago_crime_v1" in result.output
 
 
+def test_cli_validate_accepts_shipped_chicago_config() -> None:
+    """A valid config passes validation (positive control for validate)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml"
+    result = CliRunner().invoke(app, ["validate", "--config", str(config_path)])
+    assert result.exit_code == 0, result.output
+    assert "pipeline builds: 5 steps" in result.output
+
+
+def test_cli_validate_rejects_unknown_configured_step(tmp_path: Path) -> None:
+    """Issue #29: validate must check the pipeline run() will execute.
+
+    A configured-but-unknown step in features.steps must fail validation
+    instead of silently validating the recipe's built-in pipeline.
+    """
+    path = tmp_path / "unknown-step.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "dataset": "chicago_crime",
+                "recipe": "chicago_crime_v1",
+                "features": {"steps": ["not_a_real_step"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(app, ["validate", "--config", str(path)])
+    assert result.exit_code == 1, result.output
+    assert "not_a_real_step" in result.output
+
+
+def test_cli_validate_rejects_unknown_temporal_component(tmp_path: Path) -> None:
+    """Issue #30: a typo in temporal.components must fail validation."""
+    path = tmp_path / "unknown-component.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "dataset": "chicago_crime",
+                "recipe": "chicago_crime_v1",
+                "temporal": {"components": ["hour_of_dya"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = CliRunner().invoke(app, ["validate", "--config", str(path)])
+    assert result.exit_code == 1, result.output
+    assert "hour_of_dya" in result.output
+
+
 def test_cli_missing_input_fails_without_output(
     tmp_path: Path, recipe_config: RecipeConfig
 ) -> None:

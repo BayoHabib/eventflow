@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from eventflow.core._time import duration_seconds
 from eventflow.core.pipeline import Step
-from eventflow.core.schema import FeatureProvenance
+from eventflow.core.schema import TEMPORAL_COMPONENTS, FeatureProvenance
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
@@ -139,6 +139,17 @@ class ExtractTemporalComponentsStep(Step):
         if components is None:
             components = self._builder_components or ["hour_of_day", "day_of_week"]
         self.components = list(components)
+        # An unknown component must fail here, not be silently skipped by
+        # run(): the if-chains below only produce the supported components,
+        # so a typo such as "hour_of_dya" used to yield neither the
+        # misspelled nor the intended column (issue #30). Validated against
+        # the same set as TemporalConfig.components in core/schema.py.
+        unknown = sorted(set(self.components) - TEMPORAL_COMPONENTS)
+        if unknown:
+            raise ValueError(
+                "Unknown temporal component(s): " + ", ".join(unknown) + ". "
+                "Supported temporal components: " + ", ".join(sorted(TEMPORAL_COMPONENTS)) + "."
+            )
 
     @classmethod
     def with_components(cls, components: Sequence[str]) -> type[ExtractTemporalComponentsStep]:

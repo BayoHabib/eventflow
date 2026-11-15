@@ -105,6 +105,37 @@ def test_temporal_typo_rejected() -> None:
     assert "time_binn" in str(excinfo.value)
 
 
+def test_temporal_component_value_rejected() -> None:
+    """Issue #30: an unknown temporal component value must fail loudly.
+
+    Unknown *keys* were already rejected (phase 0); an unknown *value*
+    such as ``hour_of_dya`` must be rejected the same way, with the
+    supported components listed, instead of silently producing no column.
+    """
+    with pytest.raises(ValidationError) as excinfo:
+        RecipeConfig(**_base_recipe_kwargs(), temporal={"components": ["hour_of_dya"]})
+    message = str(excinfo.value)
+    assert "hour_of_dya" in message
+    assert "hour_of_day" in message  # the valid component is listed
+
+
+def test_get_pipeline_rejects_unknown_configured_step() -> None:
+    """Issue #29: get_pipeline() must resolve features.steps, not ignore it.
+
+    This is the contract CLI validate relies on: the pipeline that
+    run()/run_async() will execute must fail here for an unknown step
+    instead of falling back to the recipe's built-in pipeline.
+    """
+    from eventflow.core.steps import get_default_registry
+
+    config = RecipeConfig(**_base_recipe_kwargs(), features={"steps": ["not_a_real_step"]})
+    recipe = get_recipe(
+        "chicago_crime", "chicago_crime_v1", config, step_registry=get_default_registry()
+    )
+    with pytest.raises(KeyError, match="not_a_real_step"):
+        recipe.get_pipeline()
+
+
 def test_typed_grid_and_temporal_defaults() -> None:
     """Grid/temporal sections keep their documented defaults, typed."""
     config = RecipeConfig(**_base_recipe_kwargs())

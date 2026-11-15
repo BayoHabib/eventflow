@@ -189,9 +189,13 @@ def validate(
     try:
         if "recipe" in config_dict:
             recipe_config = RecipeConfig(**config_dict)
-            # Schema validity is not enough: also build the pipeline, so a
-            # declared-but-unimplemented feature fails here instead of at run
-            # time (see FeatureConfig.require_implemented).
+            # Schema validity is not enough: also build the pipeline that
+            # run()/run_async() will execute, so a misconfiguration fails
+            # here instead of at run time (see FeatureConfig.require_implemented).
+            # get_pipeline() — not build_pipeline() — resolves features.steps
+            # through the step registry when configured; validating only the
+            # recipe's built-in pipeline would silently accept an unknown
+            # configured step (issue #29).
             from eventflow.recipes.registry import get_recipe
 
             recipe = get_recipe(
@@ -200,7 +204,7 @@ def validate(
                 recipe_config,
                 step_registry=get_step_registry(),
             )
-            pipeline = recipe.build_pipeline()
+            pipeline = recipe.get_pipeline()
             typer.echo(
                 f"✓ Valid recipe configuration: {config} "
                 f"(pipeline builds: {len(pipeline.steps)} steps)"

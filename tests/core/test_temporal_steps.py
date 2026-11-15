@@ -121,6 +121,22 @@ class TestExtractTemporalComponentsStep:
         assert "hour_of_day" in df.columns
         assert "day_of_week" in df.columns
 
+    def test_unknown_component_rejected_at_construction(self) -> None:
+        """Issue #30: an unknown component must fail, not silently no-op.
+
+        Before the fix, constructing the step with ``hour_of_dya`` (a typo
+        for ``hour_of_day``) succeeded and ``run()`` produced neither the
+        misspelled nor the intended column.
+        """
+        with pytest.raises(ValueError, match="hour_of_dya"):
+            ExtractTemporalComponentsStep(components=["hour_of_dya"])
+
+    def test_unknown_component_rejected_via_builder_api(self) -> None:
+        """Issue #30: the builder API must reject unknown components too."""
+        ConfiguredStep = ExtractTemporalComponentsStep.with_components(["hour_of_dya"])
+        with pytest.raises(ValueError, match="hour_of_dya"):
+            ConfiguredStep()
+
 
 class TestTimeBinsStep:
     """Tests for TimeBinsStep."""
