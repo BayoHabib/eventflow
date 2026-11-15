@@ -45,13 +45,10 @@ class BaseRecipe(ABC):
 
     def get_pipeline(self) -> Pipeline:
         """Return a pipeline, using configured steps if provided."""
-        feature_cfg = self.config.features
-        steps_cfg = feature_cfg.get("steps") if isinstance(feature_cfg, dict) else None
+        steps_cfg = self.config.features.steps
         if steps_cfg:
             if self._step_registry is None:
                 raise ValueError("Step registry required when features.steps is configured")
-            if not isinstance(steps_cfg, (list, tuple)):
-                raise TypeError("features.steps must be a sequence of step definitions")
             return self._step_registry.build_pipeline(steps_cfg)
         return self.build_pipeline()
 

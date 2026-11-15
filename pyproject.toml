@@ -46,6 +46,15 @@ dev = [
     "pre-commit>=3.3.0",
     "hypothesis>=6.87.0",
     "pandera>=0.17.0",
+    # Required by tests/core/test_output_adapters.py::TestTableAdapter::test_to_pandas
+    # (TableOutput.to_pandas() goes through Polars, which needs pandas + pyarrow).
+    # Declared here so `pip install -e ".[dev]"` yields a green suite; the test
+    # also skips cleanly when pandas is absent (see the test itself).
+    "pandas>=2.0",
+    # Same story for pyarrow: Polars routes to_pandas() through it, and the
+    # test guards it with importorskip. Declaring it keeps test_to_pandas
+    # actually running (not skipped) after a fresh install.
+    "pyarrow>=14.0",
 ]
 tracking = [
     "mlflow>=2.8.0",
@@ -58,10 +67,11 @@ all = [
 eventflow = "eventflow.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/eventflow/eventflow"
-Documentation = "https://eventflow.readthedocs.io"
-Repository = "https://github.com/eventflow/eventflow"
-"Bug Tracker" = "https://github.com/eventflow/eventflow/issues"
+Homepage = "https://github.com/BayoHabib/eventflow"
+# Documentation lives in docs/ in this repository; there is no
+# ReadTheDocs site (the URL was removed in phase 0, 2026-11-15).
+Repository = "https://github.com/BayoHabib/eventflow"
+"Bug Tracker" = "https://github.com/BayoHabib/eventflow/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

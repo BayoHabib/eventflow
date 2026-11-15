@@ -5,7 +5,6 @@ recipe: "chicago_crime_v1"
 grid:
   size_m: 300  # 300m x 300m grid cells
   origin: [0.0, 0.0]  # Fixed origin in EPSG:26971 meters, shared across batches
-  buffer_m: 0  # No buffer around grid
 
 # Temporal configuration
 temporal:
@@ -17,22 +16,18 @@ temporal:
     - is_weekend
 
 # Feature engineering
+# Phase 0 (2026-11-15): this section lists ONLY what the recipe produces.
+# categorical_features and aggregation_windows used to be declared here
+# but were silently ignored by build_pipeline(); they were removed and
+# moved to docs/design-notes/chicago-declared-features.md (planned phase 1).
+# Re-adding them now raises a blocking error instead of being dropped.
 features:
-  # Basic counts per grid cell and time bin
+  # Basic counts per grid cell and time bin (implemented by ChicagoCountStep)
   count_features: true
-  
-  # Category-specific features
-  categorical_features:
-    - primary_type
-    - location_description
-  
-  # Aggregation windows (moving windows)
-  aggregation_windows:
-    - "1d"
-    - "7d"
-    - "30d"
 
-# Context enrichment (disabled for baseline)
+# Context enrichment (disabled for baseline).
+# Enabling any source raises a blocking error: context enrichment is not
+# wired into this recipe yet (see the design note above).
 context:
   weather:
     enabled: false
@@ -42,9 +37,8 @@ context:
     enabled: false
 
 # Output configuration
+# partition_by used to be declared here but was silently ignored (the CLI
+# writes a single file). It was removed; re-adding it raises a blocking error.
 output:
   format: "parquet"
   compression: "snappy"
-  partition_by:
-    - year
-    - month

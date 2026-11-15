@@ -1,7 +1,7 @@
 # EventFlow
 
 [![Test & Lint](https://github.com/BayoHabib/eventflow/actions/workflows/ci.yml/badge.svg)](https://github.com/BayoHabib/eventflow/actions)
-[![Coverage](https://img.shields.io/badge/coverage-68%25-yellow.svg)](https://github.com/BayoHabib/eventflow)
+[![Coverage](https://img.shields.io/badge/coverage-82%25-yellow.svg)](https://github.com/BayoHabib/eventflow)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/BayoHabib/eventflow/releases)
@@ -59,7 +59,24 @@ EventFlow transforms raw event data (crime records, sensor readings, transaction
 - ⏰ **Temporal features** - time bins, rolling windows, inter-event times
 - 📊 **Point process features** - intensity estimation, kernel smoothing
 - 🧪 **Composable pipelines** - registry-based step system
-- ✅ **Validated** - 290 tests, 68% coverage
+- ✅ **Validated** - 564 tests, 82% coverage (measured by `make audit`, 2026-11-15; see `docs/audit/`)
+
+## What EventFlow does not do
+
+- **No model training and no prediction serving.** EventFlow prepares
+  ML-ready features; models live downstream (e.g. `chicago_crime_api`).
+- **No per-category or rolling-window features yet.** `categorical_features`
+  and `aggregation_windows` are planned for phase 1; declaring them in a
+  recipe now raises a blocking error instead of being silently ignored
+  (see `docs/design-notes/chicago-declared-features.md`).
+- **No zero-count pairs in the Chicago output.** The recipe counts observed
+  cell/bin pairs only; zero-count pairs require a separate completion step.
+- **No partitioned output.** `output.partition_by` is not implemented; the
+  CLI writes a single file.
+- **No context enrichment in the Chicago recipe.** Weather, events and
+  demographics sources exist but are unwired and untested (experimental).
+- **No FastAPI service, PyPI release or Docker image yet.** These are the
+  open high-priority TODO items; see `TODO.md`.
 
 ## Installation
 
@@ -105,6 +122,12 @@ CRSs. Call `TransformCRSStep` first and pass a metric `crs` explicitly to `creat
 
 ## Quick Start
 
+Every snippet below is executed by `tests/test_readme_examples.py`, so it
+cannot drift from the code again. The examples share one frame: `df` must
+contain the columns named in each snippet. In particular, the raster and
+graph adapters work from a `grid_id` column of `"row_col"` strings (e.g.
+`"0_0"`), not from `lat_bin`/`lon_bin` alone.
+
 ```python
 import polars as pl
 from eventflow.core.adapters import (
@@ -119,6 +142,7 @@ from eventflow.core.adapters import (
 df = pl.read_csv("crime_data.csv")
 
 # 1. TableAdapter - For regression models
+# Requires df to contain event_count, lat_bin, lon_bin, day_of_week.
 table_config = TableAdapterConfig(
     target_col="event_count",
     feature_cols=["lat_bin", "lon_bin", "day_of_week"],
@@ -128,33 +152,39 @@ table_output = table_adapter.convert(df)
 X, y = table_output.get_X_y()  # Ready for sklearn!
 
 # 2. SequenceAdapter - For LSTM/Transformer
+# Requires a spatial id column (here cell_id) and a timestamp column.
 seq_config = SequenceAdapterConfig(
-    sequence_col="cell_id",
-    time_col="date",
+    spatial_col="cell_id",
+    timestamp_col="date",
     feature_cols=["event_count"],
-    max_length=30,
+    sequence_length=30,
 )
 seq_adapter = SequenceAdapter(seq_config)
 seq_output = seq_adapter.convert(df)
-# seq_output.sequences: (N_cells, 30, 1) tensor
+# seq_output.sequences: (N_cells, 30, 1) tensor; seq_output.masks: (N_cells, 30)
 
 # 3. RasterAdapter - For CNN models
+# Requires a grid_id column ("row_col" strings) and a timestamp column.
+# The first dimension is the number of distinct timestamps in the input,
+# so (91, 2, 10, 10) needs 91 distinct dates; with 3 dates it is (3, 2, 10, 10).
 raster_config = RasterAdapterConfig(
-    time_col="date",
-    lat_col="lat_bin",
-    lon_col="lon_bin", 
-    value_cols=["event_count", "arrest_count"],
-    height=10, width=10,
+    grid_col="grid_id",
+    timestamp_col="date",
+    feature_cols=["event_count", "arrest_count"],
+    grid_shape=(10, 10),
 )
 raster_adapter = RasterAdapter(raster_config)
 raster_output = raster_adapter.convert(df)
-# raster_output.raster: (91, 2, 10, 10) - 91 days, 2 channels
+# raster_output.raster: (T, 2, 10, 10) - T timesteps, 2 channels
 
 # 4. GraphAdapter - For GNN models
+# adjacency_type is "spatial", "temporal" or "both" (there is no "grid"
+# mode). With "row_col" node ids and no latitude/longitude columns, edges
+# fall back to 4-connectivity grid adjacency.
 graph_config = GraphAdapterConfig(
-    node_id_col="cell_id",
+    node_col="grid_id",
     feature_cols=["total_events", "centroid_lat", "centroid_lon"],
-    adjacency_type="grid",
+    adjacency_type="spatial",
 )
 graph_adapter = GraphAdapter(graph_config)
 graph_output = graph_adapter.convert(df)
@@ -173,26 +203,31 @@ stream_output = stream_adapter.convert(df)
 
 ## Pipeline Steps
 
-EventFlow provides composable pipeline steps for feature engineering:
+EventFlow provides composable pipeline steps for feature engineering
+(every name below is importable from `eventflow.core.steps` — the list is
+checked by `tests/test_readme_examples.py`):
 
 ```python
 from eventflow.core.steps import (
     # Temporal
-    TimeOfDayStep, DayOfWeekStep, HourlyBinStep,
-    RollingWindowStep, LagFeaturesStep,
-    
+    TimeBinsStep, ExtractTemporalComponentsStep, CalendarEncodingStep,
+    TemporalLagStep, MovingAverageStep,
+
     # Spatial
-    GridBinningStep, SpatialLagStep, DistanceToStep,
-    
+    AssignToGridStep, AssignToZonesStep, GridAggregationStep,
+    SpatialLagStep, TransformCRSStep, ComputeDistancesStep,
+    KDEStep, LocalMoranStep,
+
     # Point Process
-    IntensityEstimationStep, KernelDensityStep,
-    InterEventTimeStep, EventCountStep,
-    
+    HawkesKernelStep, ConditionalIntensityStep,
+    ContinuousInterEventStep,
+
     # Streaming
-    SessionizeStep, TumblingWindowStep, SlidingWindowStep,
-    
-    # Validation
-    ValidateTemporalOrderStep, ValidateSpatialBoundsStep,
+    StreamingWindowStep, StreamingInterEventStep, StreamingHawkesStep,
+)
+from eventflow.core.steps.validation import (
+    validate_temporal_ordering,
+    validate_point_process_features,
 )
 ```
 
@@ -221,7 +256,7 @@ eventflow/
 │   ├── recipes/           # Composable pipelines
 │   └── tracking/          # MLflow integration
 ├── notebooks/             # Demo notebooks
-├── tests/                 # 290 tests
+├── tests/                 # 564 tests (measured by `make audit`, 2026-11-15)
 └── docs/                  # Documentation
 ```
 
@@ -238,6 +273,12 @@ See [`notebooks/demo_chicago_crime.ipynb`](notebooks/demo_chicago_crime.ipynb) f
    - Multi-Modal Fusion
    - Causal Inference
    - Anomaly Detection
+
+> **Unverified (phase 0):** the demo notebook is not executed in CI and
+> was not executed in the 2026-11-15 audit, so its figures (spatial
+> correlation ρ = 0.515, 104 anomalies, etc.) are **not confirmed** — see
+> `docs/audit/known-limitations.md`. The recipe itself, by contrast, is
+> replayed on real Q1 2024 data by `make audit`.
 
 ## Development
 

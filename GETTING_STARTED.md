@@ -32,7 +32,7 @@ eventflow/
 │   │   ├── event_frame.py  # EventFrame abstraction
 │   │   ├── spatial.py      # Spatial operations
 │   │   ├── temporal.py     # Temporal operations
-│   │   ├── features.py     # Feature engineering
+│   │   ├── features.py     # Feature engineering (partly experimental, phase 0)
 │   │   ├── pipeline.py     # Pipeline orchestration
 │   │   ├── utils.py        # Utilities
 │   │   └── context/        # Context enrichment

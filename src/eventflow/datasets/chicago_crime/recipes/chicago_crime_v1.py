@@ -82,8 +82,27 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
         grid_config = self.config.grid
         temporal_config = self.config.temporal
 
-        size_m = float(grid_config.get("size_m", 300))
-        origin_config = grid_config.get("origin", [0.0, 0.0])
+        # Phase 0 honesty: no declared feature may be silently dropped.
+        # categorical_features / aggregation_windows are typed in
+        # FeatureConfig but not implemented by any recipe yet — fail loudly
+        # instead of producing an output that lacks them.
+        self.config.features.require_implemented("chicago_crime_v1")
+        if not self.config.features.count_features:
+            raise ValueError(
+                "chicago_crime_v1 always counts events per cell/bin; "
+                "count_features: false is not supported by this recipe"
+            )
+        # NB: grid.buffer_m is rejected by GridConfig itself (extra="forbid").
+        for source, enabled in (self.config.context or {}).items():
+            if isinstance(enabled, dict) and enabled.get("enabled", False):
+                raise ValueError(
+                    f"chicago_crime_v1 does not wire context enrichment "
+                    f"(context.{source}.enabled is true); context sources are "
+                    "not implemented for this recipe"
+                )
+
+        size_m = float(grid_config.size_m)
+        origin_config = grid_config.origin
         if len(origin_config) != 2:
             raise ValueError("grid.origin must contain x and y in projected meters")
         origin = (float(origin_config[0]), float(origin_config[1]))
@@ -92,10 +111,8 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
             [
                 TransformCRSStep(target_crs="EPSG:26971"),
                 AssignToGridStep(grid_size_m=size_m, origin=origin),
-                TimeBinsStep(bin_size=temporal_config.get("time_bin", "6h")),
+                TimeBinsStep(bin_size=temporal_config.time_bin),
                 ChicagoCountStep(size_m, origin),
-                ExtractTemporalComponentsStep(
-                    components=temporal_config.get("components", ["hour_of_day", "day_of_week"])
-                ),
+                ExtractTemporalComponentsStep(components=temporal_config.components),
             ]
         )

@@ -51,7 +51,7 @@
 - [ ] Document adapter output schemas clearly
 
 ### Testing
-- [ ] Increase coverage from 68% to 80%+
+- [x] Increase coverage from 68% to 80%+ — DONE in phase 0 (measured 82%, 564 tests, 2026-11-15; see `docs/audit/`)
 - [ ] Add integration tests for full pipelines
 - [ ] Add property-based tests (Hypothesis) for adapters
 - [ ] Add performance regression tests
@@ -84,6 +84,11 @@
 
 ## 📝 Notes from Demo
 
+> **Unverified (phase 0, 2026-11-15):** the figures below come from the demo
+> notebook, which is not executed in CI and was not executed in the
+> 2026-11-15 audit. They are **not confirmed** — see
+> `docs/audit/known-limitations.md`. Do not cite them as results.
+
 ### Key Insights from Chicago Crime Analysis
 1. **Spatial correlation ρ = 0.515** → ST-GNN will benefit from neighbor info
 2. **Graph-Sequence correlation r = 0.953** → High-crime areas are volatile
@@ -97,4 +102,4 @@
 
 ---
 
-*Last updated: December 8, 2025*
+*Last updated: November 15, 2026 (phase 0: coverage item closed, demo figures marked unverified)*

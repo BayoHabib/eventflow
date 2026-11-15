@@ -1,6 +1,29 @@
-"""Feature engineering utilities."""
+"""Feature engineering utilities.
 
-from typing import Any, cast
+Phase-0 status (2026-11-15) — this module is PARTLY EXPERIMENTAL:
+
+- SUPPORTED (tested): ``compute_ratios``. One pure function, no tested
+  Step equivalent, covered by ``tests/core/test_features_utils.py``.
+- EXPERIMENTAL (untested, use at your own risk): ``aggregate_by_category``,
+  ``encode_categorical``, ``normalize_features``. They are generic and have
+  no exact tested Step equivalent, but each has a known limitation
+  documented on the function (eager category collection, no fit/transform
+  split, stale output schema — see below). They must not be presented as
+  production-ready, and promoting one requires fixing its documented
+  limitation first and adding tests.
+- REMOVED in phase 0: ``aggregate_counts``, ``moving_window_aggregation``
+  and ``lag_features``. All three were superseded by tested Steps
+  (``GridAggregationStep`` / ``ChicagoCountStep``,
+  ``MovingAverageStep``, ``TemporalLagStep``); ``moving_window_aggregation``
+  was additionally broken (it ignored ``group_by`` and raised on duration
+  windows) and ``lag_features`` silently allowed negative lags (lookahead
+  leakage). Use the Steps instead.
+
+Known limitation shared by every function here: results are returned via
+``EventFrame.with_lazy_frame()``, which keeps the input schema — the
+returned frame's schema does not describe the new columns. Tested Steps
+register provenance instead; prefer them.
+"""
 
 import polars as pl
 
@@ -8,29 +31,6 @@ from eventflow.core.event_frame import EventFrame
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
-
-
-def aggregate_counts(
-    event_frame: EventFrame,
-    group_by: list[str],
-    count_col: str = "count",
-) -> EventFrame:
-    """
-    Compute event counts per group.
-
-    Args:
-        event_frame: Input EventFrame
-        group_by: Columns to group by (e.g., ["grid_id", "time_bin"])
-        count_col: Name of count column
-
-    Returns:
-        EventFrame with aggregated counts
-    """
-    logger.info(f"Aggregating counts by: {group_by}")
-    lf = event_frame.lazy_frame.group_by(group_by).agg([pl.len().alias(count_col)])
-    logger.debug(f"Created count column: {count_col}")
-
-    return event_frame.with_lazy_frame(lf)
 
 
 def aggregate_by_category(
@@ -41,6 +41,11 @@ def aggregate_by_category(
 ) -> EventFrame:
     """
     Compute counts per category within groups.
+
+    EXPERIMENTAL (phase 0): no tested Step does a per-category pivot, but
+    this function eagerly collects the distinct categories (it does not
+    stay lazy) and does not escape category values in the generated column
+    names. Do not use it in production without fixing those two points.
 
     Args:
         event_frame: Input EventFrame
@@ -83,93 +88,6 @@ def aggregate_by_category(
     return event_frame.with_lazy_frame(lf)
 
 
-def moving_window_aggregation(
-    event_frame: EventFrame,
-    window_size: str,
-    group_by: list[str],
-    agg_col: str,
-    agg_fn: str = "mean",
-    output_col: str | None = None,
-) -> EventFrame:
-    """
-    Compute moving window aggregations.
-
-    Args:
-        event_frame: Input EventFrame
-        window_size: Window size (e.g., "7d", "1h")
-        group_by: Columns to group by (typically includes time_bin)
-        agg_col: Column to aggregate
-        agg_fn: Aggregation function ("mean", "sum", "min", "max", "std")
-        output_col: Name of output column
-
-    Returns:
-        EventFrame with moving window features
-    """
-    if output_col is None:
-        output_col = f"{agg_col}_{agg_fn}_{window_size}"
-
-    timestamp_col = event_frame.schema.timestamp_col
-
-    # Sort by timestamp for window operations
-    lf = event_frame.lazy_frame.sort(timestamp_col)
-
-    # Apply rolling aggregation
-    # NOTE: Polars supports string durations for rolling windows at runtime, but
-    # the current type stubs only accept integers. Cast to Any to avoid false
-    # positives while keeping the expressive API.
-    column_expr = cast(Any, pl.col(agg_col))
-
-    if agg_fn == "mean":
-        agg_expr = column_expr.rolling_mean(window_size)
-    elif agg_fn == "sum":
-        agg_expr = column_expr.rolling_sum(window_size)
-    elif agg_fn == "min":
-        agg_expr = column_expr.rolling_min(window_size)
-    elif agg_fn == "max":
-        agg_expr = column_expr.rolling_max(window_size)
-    elif agg_fn == "std":
-        agg_expr = column_expr.rolling_std(window_size)
-    else:
-        raise ValueError(f"Unknown aggregation function: {agg_fn}")
-
-    lf = lf.with_columns([agg_expr.alias(output_col)])
-
-    return event_frame.with_lazy_frame(lf)
-
-
-def lag_features(
-    event_frame: EventFrame,
-    lag_col: str,
-    lags: list[int],
-    group_by: list[str] | None = None,
-) -> EventFrame:
-    """
-    Create lag features.
-
-    Args:
-        event_frame: Input EventFrame
-        lag_col: Column to create lags for
-        lags: List of lag periods (e.g., [1, 7, 30])
-        group_by: Optional grouping columns
-
-    Returns:
-        EventFrame with lag features
-    """
-    lf = event_frame.lazy_frame.sort(event_frame.schema.timestamp_col)
-
-    exprs = []
-    for lag in lags:
-        if group_by:
-            expr = pl.col(lag_col).shift(lag).over(group_by).alias(f"{lag_col}_lag_{lag}")
-        else:
-            expr = pl.col(lag_col).shift(lag).alias(f"{lag_col}_lag_{lag}")
-        exprs.append(expr)
-
-    lf = lf.with_columns(exprs)
-
-    return event_frame.with_lazy_frame(lf)
-
-
 def encode_categorical(
     event_frame: EventFrame,
     col: str,
@@ -179,13 +97,19 @@ def encode_categorical(
     """
     Encode categorical variables.
 
+    EXPERIMENTAL (phase 0): one-hot column order is now sorted (fixed in
+    phase 0), but ordinal encoding still uses a Python ``map_elements``
+    UDF (slow, breaks lazy/streaming) and nulls are not handled
+    explicitly. There is no ``"target"`` encoding method — the docstring
+    used to promise one, it was removed in phase 0 (target encoding must
+    be out-of-fold to avoid leakage, see the literature review).
+
     Args:
         event_frame: Input EventFrame
         col: Column to encode
         method: Encoding method:
             - "onehot": One-hot encoding
             - "ordinal": Ordinal encoding (0, 1, 2, ...)
-            - "target": Target encoding (requires target column)
         prefix: Prefix for output columns
 
     Returns:
@@ -198,8 +122,8 @@ def encode_categorical(
 
     logger.info(f"Encoding categorical column '{col}' using method '{method}'")
     if method == "onehot":
-        # Get unique values
-        unique_vals = lf.select(pl.col(col).unique()).collect()[col].to_list()
+        # Get unique values (sorted, so column order is deterministic)
+        unique_vals = lf.select(pl.col(col).unique().sort()).collect()[col].to_list()
 
         # Create binary columns
         exprs = [
@@ -235,6 +159,11 @@ def compute_ratios(
     """
     Compute ratios between columns.
 
+    Supported in phase 0 (tested in ``tests/core/test_features_utils.py``).
+    A zero denominator yields null, never an explosion: the previous
+    implementation clipped the denominator to 1e-10, so a zero denominator
+    produced a ratio of ``numerator / 1e-10``.
+
     Args:
         event_frame: Input EventFrame
         numerator_col: Numerator column
@@ -248,7 +177,12 @@ def compute_ratios(
         output_col = f"{numerator_col}_per_{denominator_col}"
 
     lf = event_frame.lazy_frame.with_columns(
-        [(pl.col(numerator_col) / pl.col(denominator_col).clip(1e-10)).alias(output_col)]
+        [
+            pl.when(pl.col(denominator_col) == 0)
+            .then(None)
+            .otherwise(pl.col(numerator_col) / pl.col(denominator_col))
+            .alias(output_col)
+        ]
     )
 
     return event_frame.with_lazy_frame(lf)
@@ -261,6 +195,14 @@ def normalize_features(
 ) -> EventFrame:
     """
     Normalize numeric features.
+
+    EXPERIMENTAL (phase 0): statistics (mean/std/min/max) are computed
+    over the WHOLE frame, so future and test rows leak into training
+    features. There is no fit/transform split. Do not use this on a
+    train/test split without fitting the statistics on the training part
+    only. Division by a zero standard deviation (or an empty min-max
+    range) is also unguarded. Promoting this function requires a fitted
+    state object first.
 
     Args:
         event_frame: Input EventFrame
