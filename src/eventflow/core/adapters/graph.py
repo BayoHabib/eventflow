@@ -545,7 +545,7 @@ class GraphAdapter(BaseModalityAdapter[GraphOutput]):
                 raise ImportError("PyTorch required for pytorch format") from e
 
         elif fmt == SerializationFormat.JSON:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             adjacency = data.get("adjacency")
             return GraphOutput(
                 node_features=np.array(data["node_features"]),

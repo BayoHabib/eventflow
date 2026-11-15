@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -742,6 +746,126 @@ class TestStreamAdapter:
 
         loaded = adapter.deserialize(path, SerializationFormat.JSON)
         assert loaded.n_events == output.n_events
+
+
+# -----------------------------------------------------------------------------
+# UTF-8 Deserialization Tests
+# -----------------------------------------------------------------------------
+
+
+_DRIVER = """
+import sys
+from pathlib import Path
+
+from eventflow.core.adapters import (
+    GraphAdapter,
+    GraphAdapterConfig,
+    SerializationFormat,
+    StreamAdapter,
+    TableAdapter,
+)
+
+kind, path = sys.argv[1], Path(sys.argv[2])
+if kind == "graph":
+    loaded = GraphAdapter(GraphAdapterConfig(node_col="grid_id")).deserialize(
+        path, SerializationFormat.JSON
+    )
+    assert loaded.node_ids == ["café — Zone"], loaded.node_ids
+    assert loaded.feature_names == ["température"], loaded.feature_names
+elif kind == "stream":
+    loaded = StreamAdapter().deserialize(path, SerializationFormat.JSON)
+    assert loaded.state_names == ["café — état"], loaded.state_names
+    assert loaded.event_type_names == ["théâtre"], loaded.event_type_names
+elif kind == "table":
+    loaded = TableAdapter().deserialize(path, SerializationFormat.PARQUET)
+    assert loaded.feature_names[0] == "température", loaded.feature_names
+print("OK", kind)
+"""
+
+
+def _deserialize_under_ascii_locale(kind: str, path: Path) -> None:
+    """Deserialize in a fresh interpreter whose default encoding is ASCII.
+
+    Patching locale.getpreferredencoding() in-process does not work: in
+    CPython 3.12, io.open() resolves the default encoding from the
+    interpreter's startup locale, cached before any test code runs.
+    The only faithful reproduction of the Windows failure mode
+    (default encoding cp1252, which cannot decode raw UTF-8 bytes) is
+    a subprocess started with LC_ALL=C, PYTHONCOERCECLOCALE=0 (so the
+    C locale is not coerced to C.UTF-8) and PYTHONUTF8=0.
+
+    The driver is passed as a file, not via -c: with an ASCII startup
+    locale, the interpreter cannot even decode a non-ASCII -c command
+    from argv. Source files, by contrast, are decoded as UTF-8.
+    """
+    driver_path = path.parent / f"_utf8_driver_{kind}.py"
+    driver_path.write_text(_DRIVER, encoding="utf-8")
+    env = os.environ.copy()
+    env.update({"LC_ALL": "C", "PYTHONCOERCECLOCALE": "0", "PYTHONUTF8": "0"})
+    src_dir = str(Path(__file__).resolve().parents[2] / "src")
+    env["PYTHONPATH"] = src_dir + os.pathsep + env.get("PYTHONPATH", "")
+    result = subprocess.run(
+        [sys.executable, str(driver_path), kind, str(path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+class TestAdapterUtf8Deserialization:
+    """JSON deserialization must read UTF-8, not the platform default.
+
+    The adapters' own serialize() escapes non-ASCII characters
+    (json.dumps defaults to ensure_ascii=True), so a round-trip through
+    serialize() never exposes the bug. It only bites when the JSON file
+    holds raw UTF-8 bytes — written by another tool with
+    ensure_ascii=False, or hand-edited — which is exactly what these
+    tests simulate.
+    """
+
+    def test_graph_json_with_non_ascii(self, tmp_path: Path) -> None:
+        """Graph JSON with raw UTF-8 names must deserialize on Windows."""
+        payload = {
+            "node_features": [[1.0, 2.0]],
+            "edge_index": [[0], [0]],
+            "node_ids": ["café — Zone"],
+            "feature_names": ["température"],
+        }
+        path = tmp_path / "graph.json"
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        _deserialize_under_ascii_locale("graph", path)
+
+    def test_stream_json_with_non_ascii(self, tmp_path: Path) -> None:
+        """Stream JSON with raw UTF-8 names must deserialize on Windows."""
+        payload = {
+            "timestamps": [0.0, 1.0],
+            "states": [[1.0, 2.0]],
+            "inter_times": [0.0, 1.0],
+            "origin": 0.0,
+            "state_names": ["café — état"],
+            "event_type_names": ["théâtre"],
+        }
+        path = tmp_path / "stream.json"
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        _deserialize_under_ascii_locale("stream", path)
+
+    def test_table_meta_json_with_non_ascii(
+        self, sample_event_frame: EventFrame, tmp_path: Path
+    ) -> None:
+        """Table .meta.json with raw UTF-8 names must deserialize on Windows."""
+        adapter = TableAdapter()
+        output = adapter.convert(sample_event_frame)
+
+        path = tmp_path / "table.parquet"
+        adapter.serialize(output, path, SerializationFormat.PARQUET)
+
+        meta_path = path.with_suffix(".meta.json")
+        meta_dict = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta_dict["feature_names"] = ["température", *meta_dict["feature_names"][1:]]
+        meta_path.write_text(json.dumps(meta_dict, indent=2, ensure_ascii=False), encoding="utf-8")
+        _deserialize_under_ascii_locale("table", path)
 
     def test_get_sequences_by_type(self, sample_event_frame: EventFrame) -> None:
         """Test splitting sequences by event type."""

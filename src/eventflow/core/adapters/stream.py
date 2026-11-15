@@ -448,7 +448,7 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
                 raise ImportError("PyTorch required for pytorch format") from e
 
         elif fmt == SerializationFormat.JSON:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             event_types = data.get("event_types")
             return StreamOutput(
                 timestamps=np.array(data["timestamps"]),

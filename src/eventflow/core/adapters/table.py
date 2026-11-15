@@ -296,7 +296,7 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
             df = pl.read_parquet(path)
             meta_path = path.with_suffix(".meta.json")
             if meta_path.exists():
-                meta_dict = json.loads(meta_path.read_text())
+                meta_dict = json.loads(meta_path.read_text(encoding="utf-8"))
                 meta = AdapterMetadata.from_dict(meta_dict)
                 return TableOutput(
                     data=df,
@@ -313,7 +313,7 @@ class TableAdapter(BaseModalityAdapter[TableOutput]):
             df = pl.read_ipc(path)
             meta_path = path.with_suffix(".meta.json")
             if meta_path.exists():
-                meta_dict = json.loads(meta_path.read_text())
+                meta_dict = json.loads(meta_path.read_text(encoding="utf-8"))
                 meta = AdapterMetadata.from_dict(meta_dict)
                 return TableOutput(
                     data=df,
