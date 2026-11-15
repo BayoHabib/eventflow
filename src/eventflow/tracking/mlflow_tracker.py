@@ -1,4 +1,10 @@
-"""MLflow implementation of TrackerProtocol."""
+"""MLflow implementation of TrackerProtocol.
+
+EXPERIMENTAL (phase 0): no test exercises this tracker against a real
+MLflow backend, and MLflow is an optional dependency. Importing the
+``eventflow.tracking`` package never requires MLflow; only instantiating
+``MLflowTracker`` does.
+"""
 
 import json
 import tempfile

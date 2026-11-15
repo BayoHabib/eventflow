@@ -76,7 +76,11 @@ class AggregateStep(Step):
         self.group_by = group_by
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        return eventflow.core.features.aggregate_counts(event_frame, self.group_by)
+        # Phase 0: aggregate_counts() was removed from core/features.py
+        # (superseded by the tested GridAggregationStep). Delegate to it.
+        from eventflow.core.steps.spatial import GridAggregationStep
+
+        return GridAggregationStep(grid_col=self.group_by[0]).run(event_frame)
 
 registry.register("aggregate", AggregateStep, tags={"feature"})
 
@@ -109,11 +113,21 @@ Functions for temporal operations:
 
 ### eventflow.core.features
 
-Functions for feature engineering:
+Functions for feature engineering (phase-0 status, 2026-11-15):
 
-- `aggregate_counts(event_frame, group_by)`: Count aggregations
-- `moving_window(event_frame, window, agg_fn)`: Moving window features
+- `compute_ratios(event_frame, numerator_col, denominator_col)`: Ratios
+  (supported, tested; zero denominator yields null)
+- `aggregate_by_category(event_frame, group_by, category_col)`: Per-category
+  counts — EXPERIMENTAL, untested
 - `encode_categorical(event_frame, col, method)`: Categorical encoding
+  (onehot/ordinal only) — EXPERIMENTAL, untested
+- `normalize_features(event_frame, cols, method)`: Z-score / min-max —
+  EXPERIMENTAL, untested (whole-frame statistics: leakage risk, see the
+  module docstring)
+
+Removed in phase 0 (use the tested Steps instead): `aggregate_counts` →
+`GridAggregationStep`, `moving_window_aggregation` → `MovingAverageStep`,
+`lag_features` → `TemporalLagStep`.
 
 ## Dataset Module
 

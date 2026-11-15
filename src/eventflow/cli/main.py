@@ -82,6 +82,13 @@ def run(
             recipe_config = RecipeConfig(**yaml.safe_load(f))
         if (recipe_config.dataset, recipe_config.recipe) != (dataset, recipe):
             raise ValueError("Dataset and recipe arguments must match the recipe configuration")
+        if recipe_config.output.get("partition_by"):
+            raise ValueError(
+                "output.partition_by "
+                f"{recipe_config.output.get('partition_by')} is declared but not "
+                "implemented: the CLI writes a single output file. Remove "
+                "partition_by from the recipe configuration."
+            )
         if dataset != "chicago_crime":
             raise ValueError(f"No CLI data loader is available for dataset: {dataset}")
         data_config = None
@@ -181,8 +188,23 @@ def validate(
     # Try to parse as recipe config
     try:
         if "recipe" in config_dict:
-            RecipeConfig(**config_dict)
-            typer.echo(f"✓ Valid recipe configuration: {config}")
+            recipe_config = RecipeConfig(**config_dict)
+            # Schema validity is not enough: also build the pipeline, so a
+            # declared-but-unimplemented feature fails here instead of at run
+            # time (see FeatureConfig.require_implemented).
+            from eventflow.recipes.registry import get_recipe
+
+            recipe = get_recipe(
+                recipe_config.dataset,
+                recipe_config.recipe,
+                recipe_config,
+                step_registry=get_step_registry(),
+            )
+            pipeline = recipe.build_pipeline()
+            typer.echo(
+                f"✓ Valid recipe configuration: {config} "
+                f"(pipeline builds: {len(pipeline.steps)} steps)"
+            )
         elif "dataset_name" in config_dict:
             DatasetConfig(**config_dict)
             typer.echo(f"✓ Valid dataset configuration: {config}")

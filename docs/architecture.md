@@ -19,7 +19,7 @@ The core layer contains all dataset-agnostic abstractions and primitives:
 - **Spatial domains** (`domain.py`): Caller-defined footprints/exclusions and geometric
   cell coverage, composed through optional domain steps; see [spatial domains](spatial_domains.md).
 - **Temporal operations** (`temporal.py`): Time binning, component extraction, alignment
-- **Feature engineering** (`features.py`): Generic aggregations and encodings
+- **Feature engineering** (`features.py`): Generic aggregations and encodings — partly experimental in phase 0 (see the module docstring); tested Steps in `steps/` are the supported path
 - **Context enrichment** (`context/`): Abstract sources and join strategies
 - **Pipeline orchestration** (`pipeline.py`): Composable step-based execution
 
@@ -121,7 +121,7 @@ Multi-stage process:
 
 1. **New datasets**: Implement in `eventflow.datasets.<dataset_name>`
 2. **New context sources**: Subclass `BaseContextSource`
-3. **New features**: Add functions to `features.py`
+3. **New features**: Add a tested Step in `steps/` and register it (preferred); `features.py` is partly experimental — see its module docstring before adding functions there
 4. **New recipes**: Register in recipe registry
 5. **New tracking backends**: Implement `TrackerProtocol`
 

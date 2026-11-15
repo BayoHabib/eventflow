@@ -62,8 +62,8 @@ def main() -> None:
                 "recipe": recipe_config.recipe,
             }
         )
-        tracker.log_param("grid_size_m", recipe_config.grid.get("size_m", 300))
-        tracker.log_param("time_bin", recipe_config.temporal.get("time_bin", "6h"))
+        tracker.log_param("grid_size_m", recipe_config.grid.size_m)
+        tracker.log_param("time_bin", recipe_config.temporal.time_bin)
         tracker.log_param("crs", dataset_config.crs)
 
     # Feature engineering

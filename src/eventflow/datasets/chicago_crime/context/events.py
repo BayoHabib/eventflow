@@ -1,4 +1,9 @@
-"""Special events context source for Chicago."""
+"""Special events context source for Chicago.
+
+EXPERIMENTAL (phase 0): untested, unwired — no recipe or test uses
+this source yet. Kept as dataset-layer material for phase-1 context
+enrichment; do not present it as working until a test exercises it.
+"""
 
 import polars as pl
 

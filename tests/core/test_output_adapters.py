@@ -196,6 +196,7 @@ class TestTableAdapter:
 
     def test_to_pandas(self, sample_event_frame: EventFrame) -> None:
         """Test pandas conversion."""
+        pytest.importorskip("pandas")
         pytest.importorskip("pyarrow")
         adapter = TableAdapter()
         output = adapter.convert(sample_event_frame)
