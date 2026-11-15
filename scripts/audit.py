@@ -73,7 +73,7 @@ def dependency_versions() -> dict[str, str]:
     # The version of the tree being audited — read from pyproject.toml,
     # never from an installed copy (which may point at another tree).
     versions["eventflow"] = "unknown"
-    for line in (ROOT / "pyproject.toml").read_text().splitlines():
+    for line in (ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
         if line.startswith("version = "):
             versions["eventflow"] = line.split('"')[1]
             break

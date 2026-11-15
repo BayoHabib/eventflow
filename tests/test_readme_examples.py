@@ -156,7 +156,7 @@ def test_readme_pipeline_steps_imports() -> None:
 
 def test_readme_has_no_stale_quick_start_names() -> None:
     """The Quick Start must not contain the stale parameter names."""
-    text = (REPO_ROOT / "README.md").read_text()
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     quick_start = text.split("## Quick Start")[1].split("## Pipeline Steps")[0]
     for stale in (
         "sequence_col",
@@ -185,7 +185,7 @@ def test_readme_has_no_stale_quick_start_names() -> None:
 
 def test_readme_has_no_stale_test_counts() -> None:
     """The README must not repeat the stale 290 tests / 68% figures."""
-    text = (REPO_ROOT / "README.md").read_text()
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     assert "290 tests" not in text
     assert "68%" not in text
     assert "68% coverage" not in text

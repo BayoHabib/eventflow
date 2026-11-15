@@ -182,7 +182,7 @@ def validate(
         typer.echo(f"Error: Config file not found: {config}", err=True)
         raise typer.Exit(code=1) from None
 
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         config_dict = yaml.safe_load(f)
 
     # Try to parse as recipe config
