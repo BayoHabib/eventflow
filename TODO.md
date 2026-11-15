@@ -4,12 +4,16 @@
 
 ## 🗺️ Roadmap (phases 0–5)
 
-> Scope (decided 2026-11-15): EventFlow must handle **any** spatio-temporal
-> problem, not just Chicago crime — generic core (timestamp + coordinates +
-> optional category), Chicago is only a use case. Taxonomy: point events,
+> Scope (decided 2026-11-15): EventFlow is a generic spatio-temporal
+> preprocessing library; Chicago crime is one use case. The target taxonomy
+> includes point events,
 > trajectories, time series on fixed locations (sensors), evolving
 > fields/rasters, areal data by zone, origin-destination flows, graph data of
-> any kind, exogenous context to join.
+> different kinds, and exogenous context to join. These are target use cases,
+> not a claim that every representation is supported today. Contracts must
+> preserve the relevant timestamps, entity identities, geometries or spatial
+> supports, observation states, and optional categories; timestamp + point
+> coordinates alone is not a universal representation.
 >
 > Phase evaluation method: exit criteria defined before, binary, verified by
 > execution not declaration; three levels (correctness, non-regression vs a
@@ -37,34 +41,60 @@
 ### Phase 1 — Generic v1 features (next)
 
 Seven generic feature groups as core Steps in Polars, YAML-declarable,
-causal, no Chicago-specific code in `core/`:
+with explicit data-availability cutoffs and no Chicago-specific code in
+`core/`. Durations, grouping keys, and category policies are configurable;
+the durations below are examples for the Chicago recipe. Reuse and verify
+existing Steps before adding implementations.
 
 1. Lags t−1/t−7/t−28 + rolling means 7/14/28 d + EWMA
 2. Sin/cos cyclical (hour, day-of-week, month)
-3. Basic spatial lag via grid adjacency, causal only (full multi-scale /
-   KDE / Hawkes stay in Phase 2)
+3. Basic spatial lag via grid adjacency, using only values available at the
+   cutoff (full multi-scale / KDE / Hawkes stay in Phase 2)
 4. Counts by type + shares + Shannon entropy, with cardinality guardrail
    (top-N + "other")
 5. Trend (recent vs longer history)
 6. Time since last event + burstiness
-7. Zero features
+7. Zero-event indicators and zero-run features where observation support
+   establishes an interpretable zero count
 
 This also implements generically the Chicago recipe's
 `categorical_features` + `aggregation_windows` (see the Phase 0 design note).
-Order: panel completion first, then features, then wiring; each group with
-reference tests vs hand-computed values, causal-cutoff (no-leakage) tests,
-docs; Chicago replay on Q1 2024; `make audit`, evidence pack, traceability
-update, PR in English.
+Order: define the observation-support/completion contract first, implement
+opt-in panel completion for features that need it, then features and wiring.
+Each group needs reference tests vs hand-computed values, data-availability
+cutoff (no-leakage) tests, and docs. Replay Chicago Q1 2024 and a second real
+dataset from another domain; produce a `make audit` evidence pack and update
+traceability. PRs are in English.
 
-- [ ] **Open decision (blocks Phase 1):** what is a missing cell/bin pair?
-  Complete the panel with explicit zeros inside the observation support
-  before any window/lag (zeros distinct from missing/out-of-domain via the
-  observation panel states; Chicago panel grows 56k → ~1.9M rows;
-  completion opt-in per recipe with `min_periods`), or compute windows/lags
-  on observed pairs only, or decide per feature.
+- [ ] **Open design decision (blocks panel-dependent features):** specify
+  the completion API and each feature's policy for missing unit/time pairs.
+  Keep these constraints explicit:
+  - A zero event count requires in-domain support, active collection, and a
+    complete input batch under the observation-quality contract. An absent
+    row alone is not evidence of zero events.
+  - Missing sensor measurements remain missing; do not replace them with
+    zeros. Unknown observation quality and out-of-domain pairs remain
+    distinguishable from measured values and interpretable zero counts.
+  - Completion is opt-in and limited to declared units and intervals, with
+    a size guardrail. The Chicago expansion from 56k to roughly 1.9M rows
+    is a planning estimate, not a generic requirement.
+  - Declare elapsed-time vs row-based windows, timezone/bin boundaries,
+    minimum valid history (`min_periods`), and null/zero handling per
+    feature. Irregular observations must not silently become regular.
+- [ ] **Second-domain proof in Phase 1:** use real sensor/time-series data
+  with irregular timestamps or gaps; show that missing measurements stay
+  missing, histories stay separated by entity, and applicable Steps work
+  without Chicago-specific assumptions.
+- [ ] **Availability contract in Phase 1:** every feature declares which
+  source observations are available at the cutoff. Temporal history and
+  spatial neighbors must exclude unavailable values, including late-arriving
+  observations where applicable. Learn top-N categories, vocabularies, and
+  other fitted statistics from the permitted training/history slice only;
+  freeze them for validation/test and define unseen-category behavior.
 - [ ] Exit criteria: all Phase 0 criteria still pass, coverage ≥ 82%, every
   group has reference + leakage tests, Chicago replay shows the new columns
-  with correct values.
+  with correct values, and the second-domain replay verifies its applicable
+  features and missing-data semantics. Skipped checks remain SKIP/INCOMPLETE.
 
 ### Phase 2 — Space-time v2
 
@@ -72,30 +102,36 @@ update, PR in English.
 - [ ] KDE / STKDE
 - [ ] Near-repeat
 - [ ] Simplified Hawkes
-- [ ] Explicit-zero panel completion
+- [ ] Extend the Phase 1 completion contract to additional spatial supports
+  where needed; preserve the same observation-quality semantics
 
-### Phase 3 — Genericity proof
+### Phase 3 — Broader genericity proof
 
-- [ ] 2nd dataset from another domain
-- [ ] 3rd dataset from another domain
+- [ ] Extend the second-domain proof established in Phase 1
+- [ ] Add a third real dataset with another representation (e.g. trajectories,
+  areal data, or flows); state what is supported and what remains unsupported
 - [ ] External connectors (POI, weather, rates)
 
-### Phase 4 — Anti-leakage evaluation
+### Phase 4 — Extended anti-leakage evaluation
+
+Build on the per-feature availability checks required from Phase 1.
 
 - [ ] Blocked splits, walk-forward
-- [ ] Out-of-fold target encoding
-- [ ] PAI / PR-AUC
+- [ ] Out-of-fold target encoding, if introduced; fit only on training folds
+- [ ] Optional downstream evaluation examples with task-appropriate metrics
+  (e.g. PAI for hotspot ranking or PR-AUC for classification); these are not
+  universal preprocessing acceptance criteria
 - [ ] Synthetic ground truth
 
-### Phase 5 — Product
+### Phase 5 — Library release
 
-Covers the High Priority items below.
+Covers the library's High Priority items below. Prediction services and
+trained models are optional downstream applications, with separate scope.
 
 - [ ] Adapter aliases (`attention_mask`, `inter_event_times`,
   `state_features`)
 - [ ] PyPI publication (+ CHANGELOG.md)
-- [ ] Docker support
-- [ ] FastAPI service
+- [ ] Reproducible example environment (Docker if useful)
 - [ ] Docs
 
 ## 🔴 High Priority (Pre-Production)
@@ -116,22 +152,16 @@ Covers the High Priority items below.
   | GraphOutput | `node_features` | `data` or keep |
   | StreamOutput | `states` | `data` or keep |
 
-### Production Deployment
-- [ ] **Create FastAPI prediction service** (`src/eventflow/api/`)
-  - [ ] `POST /predict` - Risk score for lat/lon/datetime
-  - [ ] `GET /hotspots` - Daily hotspot map
-  - [ ] `GET /anomalies` - Detected anomalies
-  - [ ] `GET /health` - Health check endpoint
-  
+### Library Distribution
 - [ ] **Publish to PyPI**
   - [ ] Finalize version number (currently 0.1.0)
   - [ ] Create CHANGELOG.md
   - [ ] `python -m build && twine upload dist/*`
 
-- [ ] **Docker support**
-  - [ ] Create `Dockerfile`
-  - [ ] Create `docker-compose.yml` for API + dependencies
-  - [ ] Add to CI/CD pipeline
+- [ ] **Reproducible example environment**
+  - [ ] Document a clean installation and executable examples
+  - [ ] Add a Dockerfile for examples if needed; a prediction API is not a
+    prerequisite for releasing the library
 
 ## 🟡 Medium Priority (Post-MVP)
 
@@ -169,10 +199,11 @@ Covers the High Priority items below.
 - [ ] Add `StreamingAdapter` for real-time data
 - [ ] Add `to_tensorflow()` method to all adapters
 - [ ] Add `to_torch()` method to all adapters (some have it)
-- [ ] Add model training utilities
-- [ ] Add pre-trained baseline models
 
 ### DevOps
+- [x] Keep documentation-only edits outside the full test/build workflow:
+  Markdown-only changes skip CI; changes to code, configs, notebooks, or
+  workflows still run it. Manual `workflow_dispatch` remains available.
 - [ ] Add pre-commit hooks for all checks
 - [ ] Add GitHub release automation
 - [ ] Add code coverage badge to README
@@ -191,11 +222,20 @@ Covers the High Priority items below.
 3. **104 anomalies detected** (84 spikes, 20 drops) in Q1 2024
 4. **Causal analysis shows reverse causality** → High crime → more enforcement
 
-### Recommended First Production Use Cases
-1. **7-Day Crime Forecast API** - RasterAdapter → ConvLSTM → REST API
-2. **Real-time Anomaly Alerts** - StreamAdapter → Z-score monitoring
-3. **Resource Allocation Dashboard** - GraphAdapter → Patrol optimization
+## Optional downstream applications (separate from library release)
+
+These are possible consumers of EventFlow outputs, not required capabilities
+or validated production use cases of the preprocessing library.
+
+- [ ] Model-training examples and baseline models, with their own evaluation
+- [ ] Chicago forecast API: RasterAdapter → model → REST API, in an example
+  or separate application; domain-specific prediction endpoints such as
+  `/predict`, `/hotspots`, and `/anomalies` belong there
+- [ ] Anomaly-monitoring example: StreamAdapter → detector → alerts, with
+  explicit ingestion/latency requirements and separate validation
+- [ ] Resource-allocation dashboard: GraphAdapter → downstream analysis,
+  with its own decision and evaluation criteria
 
 ---
 
-*Last updated: November 15, 2026 (phase 0: coverage item closed, demo figures marked unverified; roadmap phases 0–5 added)*
+*Last updated: November 15, 2026 (roadmap phases 0–5 clarified: support-aware completion and second-domain proof in phase 1, availability contracts, optional downstream applications, Markdown-only CI policy)*
