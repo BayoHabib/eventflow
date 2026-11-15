@@ -18,11 +18,17 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import polars as pl
+import shapely
 from pydantic import BaseModel, Field
+from pyproj import Transformer
+from shapely.affinity import translate
 
 from eventflow.core._time import duration_seconds
+from eventflow.core.domain import SpatialDomain
+from eventflow.core.grid import require_metric_crs
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
+from eventflow.core.steps.domain import SpatialDomainConfig
 from eventflow.core.utils import get_logger
 
 if TYPE_CHECKING:
@@ -80,16 +86,13 @@ class PairCorrelationConfig(BaseModel):
 
 
 class KFunctionConfig(BaseModel):
-    """Configuration for Ripley's K-function."""
+    """One-radius local K/L/H, with explicit metric observation support."""
 
-    max_distance: float = Field(default=1000.0, gt=0, description="Maximum distance in meters")
-    n_bins: int = Field(default=50, ge=10, description="Number of distance bins")
-    edge_correction: Literal["none", "border", "ripley"] = Field(
-        default="ripley", description="Edge correction method"
-    )
-    transform: Literal["K", "L", "H"] = Field(
-        default="L", description="Transform type: K, L (sqrt), or H (L-r)"
-    )
+    max_distance: float = Field(default=1000.0, gt=0, allow_inf_nan=False)
+    window: SpatialDomainConfig | None = None
+    n_bins: int | None = Field(default=None, description="Removed: this step evaluates one radius")
+    edge_correction: Literal["none", "translation"] = "translation"
+    transform: Literal["K", "L", "H"] = "L"
 
 
 class HazardRateConfig(BaseModel):
@@ -540,92 +543,132 @@ class PairCorrelationStep(Step):
 
 
 class KFunctionStep(Step):
-    """Compute Ripley's K-function for spatial point pattern analysis.
+    """Compute single-radius local K/L/H on an explicit metric window.
 
-    K(r) = (A / n²) * Σᵢ Σⱼ I(dᵢⱼ ≤ r) * wᵢⱼ
-
-    Supports L-transform: L(r) = sqrt(K(r) / π)
-    And H-transform: H(r) = L(r) - r
-
-    Inputs:
-        - lat_col, lon_col from EventSchema
-
-    Outputs:
-        - k_function_local: Local K-function contribution for each event
+    K_i(r) = area(W)/(n-1) * sum_{j != i, d_ij <= r} e_ij.
+    L_i = sqrt(K_i/pi); H_i = L_i-r, including isolated points.
+    Translation weights are area(W)/area(W intersect (W + displacement)).
+    The mean of K_i is the corresponding global K estimator. L/H are local
+    transforms, not a transform of that global mean. Stationarity is assumed;
+    this is descriptive batch processing, without fitting or significance tests.
     """
 
     def __init__(
         self,
         max_distance: float = 1000.0,
-        n_bins: int = 50,
-        edge_correction: str = "ripley",
+        n_bins: int | None = None,
+        edge_correction: str = "translation",
         transform: str = "L",
+        *,
+        window: SpatialDomain | SpatialDomainConfig | dict[str, Any] | None = None,
     ) -> None:
+        if not math.isfinite(max_distance) or max_distance <= 0:
+            raise ValueError("max_distance must be positive and finite")
+        if n_bins is not None:
+            raise ValueError(
+                "n_bins is no longer supported: KFunctionStep evaluates max_distance only"
+            )
+        if edge_correction not in {"none", "translation"}:
+            raise ValueError(
+                "Supported edge_correction values are none and translation; ripley is not implemented"
+            )
+        if transform not in {"K", "L", "H"}:
+            raise ValueError("transform must be K, L or H")
         self.max_distance = max_distance
         self.n_bins = n_bins
         self.edge_correction = edge_correction
         self.transform = transform
+        self.window = (
+            window.build()
+            if isinstance(window, SpatialDomainConfig)
+            else SpatialDomainConfig(**window).build() if isinstance(window, dict) else window
+        )
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        """Execute K-function computation."""
-        lat_col = event_frame.schema.lat_col
-        lon_col = event_frame.schema.lon_col
-
-        if not lat_col or not lon_col:
+        """Materialize one declared point pattern; never infer its observation window."""
+        if self.window is None:
+            raise ValueError(
+                "KFunctionStep requires an explicit observation window (SpatialDomain)"
+            )
+        require_metric_crs(self.window.crs)
+        area = self.window.geometry.area
+        if not math.isfinite(area) or area <= 0:
+            raise ValueError("K observation window must have positive finite area")
+        lat, lon = event_frame.schema.lat_col, event_frame.schema.lon_col
+        if lat is None or lon is None:
             raise ValueError("KFunctionStep requires lat_col and lon_col in schema")
-
-        logger.info(f"Computing Ripley's K-function with {self.transform}-transform")
-
-        df = event_frame.lazy_frame.collect()
-        lats = df[lat_col].to_numpy()
-        lons = df[lon_col].to_numpy()
-        n_events = len(lats)
-
-        # Compute local K-function contribution (count of neighbors within radius)
-        local_k = []
-
-        for i in range(n_events):
-            neighbor_count = 0
-            for j in range(n_events):
-                if i != j:
-                    dist = _haversine_distance(lats[i], lons[i], lats[j], lons[j])
-                    if dist <= self.max_distance:
-                        neighbor_count += 1
-            local_k.append(neighbor_count)
-
-        # Apply transform
-        if self.transform == "L":
-            local_values = [math.sqrt(k / math.pi) if k > 0 else 0 for k in local_k]
-            output_col = "l_function_local"
-        elif self.transform == "H":
-            local_values = [
-                math.sqrt(k / math.pi) - self.max_distance / 2 if k > 0 else 0.0 for k in local_k
-            ]
-            output_col = "h_function_local"
-        else:
-            local_values = [float(k) for k in local_k]
-            output_col = "k_function_local"
-
-        result_df = df.with_columns(pl.Series(output_col, local_values))
-
-        result = event_frame.with_lazy_frame(result_df.lazy())
-
-        provenance = FeatureProvenance(
-            produced_by="KFunctionStep",
-            inputs=[lat_col, lon_col],
-            tags={"spatial", "point_process"},
-            description=f"Local {self.transform}-function value",
-            metadata={
-                "max_distance": self.max_distance,
-                "transform": self.transform,
-            },
+        df = event_frame.collect()
+        x, y = df[lon].to_numpy().astype(float), df[lat].to_numpy().astype(float)
+        if not np.isfinite(x).all() or not np.isfinite(y).all():
+            raise ValueError("KFunctionStep requires finite non-null point coordinates")
+        # Native projection handles are created/used only in the executing worker.
+        transformer = Transformer.from_crs(
+            event_frame.metadata.crs, self.window.crs, always_xy=True
         )
-
-        return result.register_feature(
-            output_col,
-            {"source_step": "KFunctionStep"},
-            provenance=provenance,
+        x, y = transformer.transform(x, y)
+        if not np.isfinite(x).all() or not np.isfinite(y).all():
+            raise ValueError("K point projection produced non-finite coordinates")
+        points = shapely.points(x, y)
+        if not shapely.covers(self.window.geometry, points).all():
+            raise ValueError(
+                "K points lie outside the declared window; apply an explicit domain policy first"
+            )
+        n = df.height
+        values: list[float | None] = []
+        for i in range(n):
+            if n < 2:
+                values.append(None)  # No estimable pair intensity, not an observed zero.
+                continue
+            distances = np.hypot(x - x[i], y - y[i])
+            neighbors = np.flatnonzero((distances <= self.max_distance) & (np.arange(n) != i))
+            weighted_count = 0.0
+            for j in neighbors:
+                weight = 1.0
+                if self.edge_correction == "translation":
+                    shifted = translate(
+                        self.window.geometry, xoff=float(x[j] - x[i]), yoff=float(y[j] - y[i])
+                    )
+                    overlap = self.window.geometry.intersection(shifted).area
+                    if not math.isfinite(overlap) or overlap <= 0:
+                        raise ValueError(
+                            "Translation correction has zero window overlap; reduce radius or review boundary points"
+                        )
+                    weight = area / overlap
+                weighted_count += weight
+            values.append(area * weighted_count / (n - 1))
+        outputs = {"k_function_local": values}
+        if self.transform in {"L", "H"}:
+            l_values = [math.sqrt(v / math.pi) if v is not None else None for v in values]
+            outputs["l_function_local" if self.transform == "L" else "h_function_local"] = (
+                l_values
+                if self.transform == "L"
+                else [v - self.max_distance if v is not None else None for v in l_values]
+            )
+        result = event_frame.with_lazy_frame(
+            df.with_columns(
+                [pl.Series(col, vals, dtype=pl.Float64) for col, vals in outputs.items()]
+            ).lazy()
         )
+        for col in outputs:
+            result = result.register_feature(
+                col,
+                {"source_step": "KFunctionStep"},
+                provenance=FeatureProvenance(
+                    produced_by="KFunctionStep",
+                    inputs=[lon, lat],
+                    tags={"spatial", "point_process"},
+                    description="Local neighborhood statistic at a single radius; homogeneous point-pattern assumption",
+                    metadata={
+                        "max_distance": self.max_distance,
+                        "edge_correction": self.edge_correction,
+                        "window": self.window.metadata(),
+                        "normalization": "window_area/(n-1)",
+                        "units": "m2" if col == "k_function_local" else "m",
+                        "undefined_pair_intensity": "null for n<2",
+                    },
+                ),
+            )
+        return result
 
 
 class HazardRateStep(Step):

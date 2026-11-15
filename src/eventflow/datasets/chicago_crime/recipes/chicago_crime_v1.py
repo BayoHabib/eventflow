@@ -24,7 +24,11 @@ class ChicagoCountStep(Step):
         if lon is None or lat is None:
             raise ValueError("Chicago aggregation requires projected coordinate columns")
         lf = ef.lazy_frame.group_by(["grid_id", "time_bin"]).agg(
-            pl.len().alias("count"), pl.col(lon).first(), pl.col(lat).first()
+            pl.len().alias("count"),
+            pl.col("grid_row").first(),
+            pl.col("grid_col").first(),
+            pl.col(lon).first(),
+            pl.col(lat).first(),
         )
         lf = lf.with_columns(
             (
@@ -40,7 +44,7 @@ class ChicagoCountStep(Step):
             pl.col("time_bin").alias(ef.schema.timestamp_col),
         ).sort(["time_bin", "grid_id"])
         result = ef.with_lazy_frame(lf).with_schema(
-            numeric_cols=["count", "grid_id", lon, lat], categorical_cols=[]
+            numeric_cols=["count", "grid_id", "grid_row", "grid_col", lon, lat], categorical_cols=[]
         )
         return result.register_feature(
             "count", {"source_step": "ChicagoCountStep", "inputs": ["grid_id", "time_bin"]}

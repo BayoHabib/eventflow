@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
+from eventflow.core.domain import SpatialDomain
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.schema import EventMetadata, EventSchema
 from eventflow.core.steps.point_process import (
@@ -541,7 +542,10 @@ class TestKFunctionStep:
 
     def test_computes_k_function(self, larger_event_frame: EventFrame) -> None:
         """Test Ripley's K-function computation."""
-        step = KFunctionStep(max_distance=1000.0, transform="L")
+        window = SpatialDomain.from_wkt(
+            ["POLYGON ((-88 41, -87 41, -87 43, -88 43, -88 41))"], "EPSG:4326"
+        ).to_crs("EPSG:26971")
+        step = KFunctionStep(max_distance=1000.0, transform="L", window=window)
         result = step.run(larger_event_frame)
 
         df = result.collect()

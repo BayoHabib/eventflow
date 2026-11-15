@@ -4,6 +4,7 @@ from eventflow.core.cadence import CadenceRule
 from eventflow.core.context.sources import BaseContextSource
 from eventflow.core.domain import SpatialDomain, annotate_grid_coverage
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.grid import GridSpec
 from eventflow.core.observation import ObservationPanel
 from eventflow.core.output_adapters import BaseOutputAdapter
 from eventflow.core.registry import (
@@ -26,6 +27,7 @@ from eventflow.core.schema import (
 
 __all__ = [
     "EventFrame",
+    "GridSpec",
     "ObservationPanel",
     "CadenceRule",
     "SpatialDomain",

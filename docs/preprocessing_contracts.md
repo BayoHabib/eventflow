@@ -158,9 +158,11 @@ foundations still require work:
 6. True out-of-order streaming semantics (event time, lateness, updates and
    recovery). Awaitable batch execution does not supply those semantics.
 
-The other point-process descriptors (K-function, pair correlation, KDE and
-survival-related features) are not certified by the Moran/Gi* reference check;
-they require their own estimator, observation-window and boundary audit.
+[Local K/L/H](real_data_audit_fixes.md#local-klh-with-declared-observation-support)
+now require an explicit metric window and implement window normalization and
+translation correction, with separate analytic tests. Pair correlation, KDE
+and survival-related features are not certified by those checks; they still
+require their own estimator and boundary audits.
 
 ## References
 
