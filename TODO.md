@@ -38,13 +38,23 @@
   reported as SKIP/INCOMPLETE, issue #31), PR #35 (unknown temporal
   components in legacy function and `CalendarEncodingStep`, issue #33).
 
-### Phase 1 — Generic v1 features (next)
+### Phase 1 — Generic v1 features ✅ DONE (2026-11-15)
 
 Seven generic feature groups as core Steps in Polars, YAML-declarable,
 with explicit data-availability cutoffs and no Chicago-specific code in
 `core/`. Durations, grouping keys, and category policies are configurable;
 the durations below are examples for the Chicago recipe. Reuse and verify
 existing Steps before adding implementations.
+
+Delivered (PR #37, merged 2026-11-15): `CompletePanelStep` (explicit-zero
+panel completion, opt-in per recipe, `min_periods`) + the 7 groups as
+17 steps in the Chicago pipeline; 705 tests passed / 0 failed, coverage
+84%, `make audit` PASS 5/5; Chicago Q1 2024 replay 1,908,088 rows × 78
+columns (5,242 cells × 364 bins), sum `count` = 60,235, 1,851,597
+explicit-zero rows; traceability updated (15 attained / 8 partial /
+4 not attained / 1 unverifiable). Performance follow-ups opened as
+issues #38 (vectorize `SpatialLagStep`, 51.4 s of ~61 s) and #39 (eager
+collects at plan-build time in `_validate_time_keys`).
 
 1. Lags t−1/t−7/t−28 + rolling means 7/14/28 d + EWMA
 2. Sin/cos cyclical (hour, day-of-week, month)
@@ -66,9 +76,11 @@ cutoff (no-leakage) tests, and docs. Replay Chicago Q1 2024 and a second real
 dataset from another domain; produce a `make audit` evidence pack and update
 traceability. PRs are in English.
 
-- [ ] **Open design decision (blocks panel-dependent features):** specify
-  the completion API and each feature's policy for missing unit/time pairs.
-  Keep these constraints explicit:
+- [x] **Design decision (decided 2026-11-15, implemented in PR #37):**
+  complete the panel with explicit zeros inside the observation support
+  before any window/lag, opt-in per recipe with `min_periods`; zeros
+  distinct from missing/out-of-domain via the observation panel states.
+  The constraints below were kept:
   - A zero event count requires in-domain support, active collection, and a
     complete input batch under the observation-quality contract. An absent
     row alone is not evidence of zero events.
@@ -81,20 +93,19 @@ traceability. PRs are in English.
   - Declare elapsed-time vs row-based windows, timezone/bin boundaries,
     minimum valid history (`min_periods`), and null/zero handling per
     feature. Irregular observations must not silently become regular.
-- [ ] **Second-domain proof in Phase 1:** use real sensor/time-series data
-  with irregular timestamps or gaps; show that missing measurements stay
-  missing, histories stay separated by entity, and applicable Steps work
-  without Chicago-specific assumptions.
-- [ ] **Availability contract in Phase 1:** every feature declares which
-  source observations are available at the cutoff. Temporal history and
-  spatial neighbors must exclude unavailable values, including late-arriving
-  observations where applicable. Learn top-N categories, vocabularies, and
-  other fitted statistics from the permitted training/history slice only;
-  freeze them for validation/test and define unseen-category behavior.
-- [ ] Exit criteria: all Phase 0 criteria still pass, coverage ≥ 82%, every
-  group has reference + leakage tests, Chicago replay shows the new columns
-  with correct values, and the second-domain replay verifies its applicable
-  features and missing-data semantics. Skipped checks remain SKIP/INCOMPLETE.
+- [x] **Availability contract in Phase 1 (partially delivered):** every
+  feature declares which source observations are available at the cutoff —
+  trailing windows closed on the left, spatial lag computed from lagged
+  counts only. Temporal history and spatial neighbors exclude unavailable
+  values. The fitted-statistics half (learn top-N categories, vocabularies,
+  and other fitted statistics from the permitted training/history slice
+  only; freeze them for validation/test; define unseen-category behavior)
+  was not implemented in PR #37 — carried to Phase 4.
+- [x] Exit criteria (verified at merge, except the second-domain replay,
+  moved to Phase 3): all Phase 0 criteria still pass, coverage 84%,
+  every group has reference + leakage tests, Chicago replay shows the new
+  columns with correct values (busiest cell hand-verified against the raw
+  CSV). Skipped checks remain SKIP/INCOMPLETE.
 
 ### Phase 2 — Space-time v2
 
@@ -107,7 +118,10 @@ traceability. PRs are in English.
 
 ### Phase 3 — Broader genericity proof
 
-- [ ] Extend the second-domain proof established in Phase 1
+- [ ] **Second-domain proof (moved from Phase 1, 2026-11-15):** use real
+  sensor/time-series data with irregular timestamps or gaps; show that
+  missing measurements stay missing, histories stay separated by entity,
+  and applicable Steps work without Chicago-specific assumptions
 - [ ] Add a third real dataset with another representation (e.g. trajectories,
   areal data, or flows); state what is supported and what remains unsupported
 - [ ] External connectors (POI, weather, rates)
@@ -118,6 +132,10 @@ Build on the per-feature availability checks required from Phase 1.
 
 - [ ] Blocked splits, walk-forward
 - [ ] Out-of-fold target encoding, if introduced; fit only on training folds
+- [ ] Fitted-statistics scoping (carried from Phase 1, 2026-11-15): learn
+  top-N categories, vocabularies, and other fitted statistics from the
+  permitted training/history slice only; freeze them for validation/test
+  and define unseen-category behavior
 - [ ] Optional downstream evaluation examples with task-appropriate metrics
   (e.g. PAI for hotspot ranking or PR-AUC for classification); these are not
   universal preprocessing acceptance criteria
@@ -238,4 +256,4 @@ or validated production use cases of the preprocessing library.
 
 ---
 
-*Last updated: November 15, 2026 (roadmap phases 0–5 clarified: support-aware completion and second-domain proof in phase 1, availability contracts, optional downstream applications, Markdown-only CI policy)*
+*Last updated: November 15, 2026 (phase 1 DONE — PR #37 merged, 705 tests, 84%; second-domain proof moved from phase 1 to phase 3; fitted-statistics scoping carried to phase 4)*
