@@ -3,8 +3,18 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**/*.md'
   pull_request:
     branches: [ main, develop ]
+    paths-ignore:
+      - '**/*.md'
+  workflow_dispatch:
+
+# Markdown-only edits need no test/build runners. Mixed changes, executable
+# notebooks, configuration, audit evidence and workflow changes still run CI.
+# Keep these filters aligned for push and pull_request. If required checks
+# are introduced later, revisit filtering to avoid pending required checks.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
