@@ -9,7 +9,27 @@ locations or timestamps at which events happened.
 integrates it into ordinary synchronous/asynchronous pipelines and the built-in
 step registry under `observation_panel`.
 
-## Complete, incomplete and excluded observations
+## Independent quality declarations
+
+For new panels, configure optional `domain_col`, `collection_col` and
+`completeness_col` separately. Collection activity and batch completeness are
+never inferred from each other or from record presence. Unspecified quality
+stays unknown; a panel with no quality information retains received-record
+counts while leaving interpretable totals unknown. The reference rows themselves
+define intended domain membership unless a nullable domain flag is supplied.
+
+Optional [cadence checks](observation_quality.md) report scheduled gaps,
+duplicates and off-schedule records. They do not fill measurements, synthesize
+rows or certify collection/batch completeness. The same document provides the
+recommended API and migration details.
+
+## Legacy consolidated status: complete, incomplete and excluded observations
+
+The original `observation_status` remains supported for compatibility. The
+examples and status table below use that consolidated legacy declaration;
+metadata marks it as legacy, and it is not expanded into invented independent
+quality fields. Mixing legacy and independent declarations is rejected.
+
 
 Intervals are half-open `[start, end)`. Adjacent intervals are allowed;
 overlapping intervals for the same key combination are rejected. Interval
@@ -154,6 +174,7 @@ step = get_default_registry().create("observation_panel", params={"panel": panel
 
 A YAML reference-file loader, automatic sensor-uptime estimation, availability
 time/bitemporal matching, and support-aware resampling of continuous measurements
-remain separate work. This is not an implementation of the complete OGC
+remain separate work. Scheduled-gap diagnostics are available when an explicit
+cadence rule is supplied; they do not establish actual uptime. This is not an implementation of the complete OGC
 observation model. See [preprocessing contracts](preprocessing_contracts.md) and
 the [OGC observation semantics](https://docs.ogc.org/as/20-082r4/20-082r4.html).

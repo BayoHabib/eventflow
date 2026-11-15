@@ -13,21 +13,28 @@ import polars as pl
 import shapely
 from pyproj import CRS
 
+from eventflow.core.cadence import CadenceRule, cadence_columns, cadence_summary
+
 
 @dataclass(frozen=True, init=False, eq=False)
 class ObservationPanel:
     """A caller-supplied table of non-overlapping half-open observation intervals.
 
-    Every row defines one spatial unit/stratum and [start, end). Status is one
-    of observed (complete record collection), missing (unknown/incomplete) or
-    outside (excluded). Exposure is optional and never inferred from geometry.
-    Coordinates/geometries describe the support, not individual event locations.
+    Every row defines one spatial unit/stratum and [start, end). Domain,
+    collection activity and input-batch completeness can be declared separately;
+    unspecified quality stays unknown. A consolidated legacy status is accepted
+    for compatibility, without expanding it into independent declarations.
+    Exposure is optional and never inferred from geometry. Reference coordinates
+    describe the support, not individual event locations.
     """
 
     key_cols: tuple[str, ...]
     start_col: str
     end_col: str
-    status_col: str
+    status_col: str | None
+    domain_col: str | None
+    collection_col: str | None
+    completeness_col: str | None
     exposure_col: str | None
     exposure_unit: str | None
     x_col: str | None
@@ -45,20 +52,33 @@ class ObservationPanel:
         key_cols: Sequence[str] = ("unit_id",),
         start_col: str = "start",
         end_col: str = "end",
-        status_col: str = "observation_status",
+        status_col: str | None = None,
         exposure_col: str | None = None,
         exposure_unit: str | None = None,
         x_col: str | None = "x",
         y_col: str | None = "y",
         geometry_col: str | None = None,
+        domain_col: str | None = None,
+        collection_col: str | None = None,
+        completeness_col: str | None = None,
     ) -> None:
         if isinstance(key_cols, str):
             raise ValueError("key_cols must be a sequence of column names, not a string")
+        independent = any(c is not None for c in (domain_col, collection_col, completeness_col))
+        if independent and (status_col is not None or "observation_status" in cells.columns):
+            raise ValueError(
+                "Do not mix legacy observation_status with independent quality declarations"
+            )
+        if status_col is None and not independent and "observation_status" in cells.columns:
+            status_col = "observation_status"  # Compatibility only; no new quality inference.
         config = {
             "key_cols": tuple(key_cols),
             "start_col": start_col,
             "end_col": end_col,
             "status_col": status_col,
+            "domain_col": domain_col,
+            "collection_col": collection_col,
+            "completeness_col": completeness_col,
             "exposure_col": exposure_col,
             "exposure_unit": exposure_unit,
             "x_col": x_col,
@@ -68,7 +88,10 @@ class ObservationPanel:
         }
         for name, value in config.items():
             object.__setattr__(self, name, value)
-        roles = [*self.key_cols, start_col, end_col, status_col]
+        quality = [
+            c for c in (status_col, domain_col, collection_col, completeness_col) if c is not None
+        ]
+        roles = [*self.key_cols, start_col, end_col, *quality]
         if not self.key_cols or len(set(roles)) != len(roles):
             raise ValueError("Panel keys and temporal/status columns must be distinct")
         if exposure_col is not None:
@@ -92,7 +115,8 @@ class ObservationPanel:
         if any(name not in cells.columns for name in required):
             raise ValueError(f"Missing panel columns: {sorted(set(required) - set(cells.columns))}")
         data = cells.clone()
-        if any(data[c].null_count() for c in [*self.key_cols, start_col, end_col, status_col]):
+        mandatory = [*self.key_cols, start_col, end_col, *([status_col] if status_col else [])]
+        if any(data[c].null_count() for c in mandatory):
             raise ValueError("Panel keys, times and observation status cannot contain nulls")
         _validate_finite_keys(data, self.key_cols)
         start_dtype, end_dtype = data.schema[start_col], data.schema[end_col]
@@ -101,8 +125,22 @@ class ObservationPanel:
         object.__setattr__(self, "time_dtype", start_dtype)
         if data.filter(pl.col(start_col) >= pl.col(end_col)).height:
             raise ValueError("Every panel interval must have start < end")
-        if not set(data[status_col].to_list()) <= {"observed", "missing", "outside"}:
+        if status_col is not None and not set(data[status_col].to_list()) <= {
+            "observed",
+            "missing",
+            "outside",
+        }:
             raise ValueError("Observation status must be observed, missing or outside")
+        if domain_col is not None:
+            if data.schema[domain_col] not in (pl.Boolean, pl.Null):
+                raise ValueError("Domain membership must be Boolean with null for unknown")
+            data = data.with_columns(pl.col(domain_col).cast(pl.Boolean))
+        for column, allowed in [
+            (collection_col, {"active", "inactive", "unknown", None}),
+            (completeness_col, {"complete", "incomplete", "unknown", None}),
+        ]:
+            if column is not None and not set(data[column].to_list()) <= allowed:
+                raise ValueError(f"Invalid quality declaration in {column!r}")
         # Sort within each stratum. Adjacent [a,b), [b,c) intervals are valid.
         ordered = data.sort([*self.key_cols, start_col])
         previous_end = pl.col(end_col).shift(1).over(list(self.key_cols))
@@ -130,7 +168,7 @@ class ObservationPanel:
                 raise ValueError(
                     "Exposure must be finite and non-negative, representable in Float64, or null"
                 )
-            if data.filter((pl.col(status_col) == "outside") & (exposure > 0)).height:
+            if data.filter(self.outside_expr() & (exposure > 0)).height:
                 raise ValueError("Outside-domain rows cannot have positive exposure")
         object.__setattr__(self, "_cells", data)
         signature = json.dumps(
@@ -139,6 +177,10 @@ class ObservationPanel:
                 "start": start_col,
                 "end": end_col,
                 "status": status_col,
+                "quality_contract": 2,
+                "domain": domain_col,
+                "collection": collection_col,
+                "completeness": completeness_col,
                 "exposure": exposure_col,
                 "unit": exposure_unit,
                 "crs": self.crs,
@@ -165,6 +207,12 @@ class ObservationPanel:
             "start_col": self.start_col,
             "end_col": self.end_col,
             "status_col": self.status_col,
+            "quality_mode": "legacy" if self.status_col else "independent",
+            "domain_col": self.domain_col,
+            "collection_col": self.collection_col,
+            "completeness_col": self.completeness_col,
+            "unspecified_quality": "unknown",
+            "quality_contract": 2,
             "bounds": "[start, end)",
             "exposure_col": self.exposure_col,
             "exposure_unit": self.exposure_unit,
@@ -175,10 +223,19 @@ class ObservationPanel:
             "timestamp_precision": self.time_dtype.time_unit,
             "time_zone": self.time_dtype.time_zone,
             "rows": self._cells.height,
-            "status_meaning": {
-                "observed": "complete record collection",
-                "missing": "unknown or incomplete collection",
-                "outside": "excluded from the observation domain",
+            "status_meaning": (
+                {
+                    "observed": "legacy consolidated eligibility declaration",
+                    "missing": "unknown or incomplete collection",
+                    "outside": "excluded from the observation domain",
+                }
+                if self.status_col
+                else {}
+            ),
+            "independent_quality_meaning": {
+                "domain": "explicit reference membership, nullable when supplied",
+                "collection": "declared active/inactive/unknown collection",
+                "completeness": "declared complete/incomplete/unknown input batch",
             },
         }
 
@@ -193,21 +250,173 @@ class ObservationPanel:
         offset_col: str = "log_exposure",
         events_outside: Literal["error", "ignore"] = "error",
         event_id_col: str | None = None,
+        cadence_rule: CadenceRule | None = None,
+        cadence_prefix: str = "cadence",
+        include_missing_times: bool = False,
+        on_gap: Literal["report", "raise"] = "report",
     ) -> tuple[pl.DataFrame, dict[str, int]]:
-        """Count input records on explicit support; only observed rows get zeros.
+        """Count input records on explicit support; only eligible support gets zeros.
 
         Missing rows can have recorded_count > 0 while their total remains null.
         Outside-support records error by default; ignoring is explicit and audited.
         The returned diagnostics count accepted/excluded input rows, not events
         inferred from unobserved intervals. No input measurements are summed.
         """
-        if events_outside not in {"error", "ignore"}:
-            raise ValueError("events_outside must be error or ignore")
+        if on_gap not in {"report", "raise"}:
+            raise ValueError("on_gap must be report or raise")
         output_cols = [count_col, recorded_col]
         if self.exposure_col is not None:
             output_cols += [rate_col, offset_col]
         if len(set(output_cols)) != len(output_cols) or set(output_cols) & set(self._cells.columns):
             raise ValueError("Panel output names must be distinct and absent from the reference")
+        if cadence_rule is not None:
+            extra = cadence_columns(cadence_prefix, include_missing_times)
+            if set(extra) & set(output_cols):
+                raise ValueError("Cadence output columns collide with count output names")
+        reference, accepted, diagnostics, row_id = self._match_events(
+            events,
+            timestamp_col,
+            events_outside=events_outside,
+            event_id_col=event_id_col,
+            reserved_names=output_cols,
+        )
+        counts = accepted.group_by(row_id).agg(pl.len().cast(pl.Int64).alias(recorded_col))
+        output = reference.join(
+            counts, on=row_id, how="left", validate="1:1", maintain_order="left"
+        )
+        output = output.with_columns(pl.col(recorded_col).fill_null(0))
+        output = output.with_columns(
+            pl.when(self.complete_expr())
+            .then(pl.col(recorded_col))
+            .otherwise(None)
+            .cast(pl.Int64)
+            .alias(count_col)
+        )
+        if self.exposure_col is not None:
+            exposure = pl.col(self.exposure_col).cast(pl.Float64)
+            if output.filter((exposure == 0) & (pl.col(recorded_col) > 0)).height:
+                raise ValueError("Recorded events cannot have known zero exposure")
+            known = self.complete_expr() & (exposure > 0)
+            output = output.with_columns(
+                pl.when(known).then(pl.col(count_col) / exposure).otherwise(None).alias(rate_col),
+                pl.when(known).then(exposure.log()).otherwise(None).alias(offset_col),
+            )
+            if output.filter(pl.col(rate_col).is_not_null() & ~pl.col(rate_col).is_finite()).height:
+                raise ValueError("Normalized event rate is not finite; check the exposure scale")
+        if cadence_rule is not None:
+            summary = self._cadence_summary(
+                reference,
+                accepted,
+                row_id,
+                timestamp_col,
+                cadence_rule,
+                cadence_prefix,
+                include_missing_times,
+                on_gap,
+            )
+            output = output.join(
+                summary, on=row_id, how="left", validate="1:1", maintain_order="left"
+            )
+        return output.drop(row_id), diagnostics
+
+    def complete_expr(self) -> pl.Expr:
+        """Count eligibility: independent declarations are never filled from records."""
+        if self.status_col is not None:
+            return pl.col(self.status_col) == "observed"
+        domain = pl.col(self.domain_col) if self.domain_col else pl.lit(True)
+        active = pl.col(self.collection_col) == "active" if self.collection_col else pl.lit(False)
+        complete = (
+            pl.col(self.completeness_col) == "complete" if self.completeness_col else pl.lit(False)
+        )
+        return (domain & active & complete).fill_null(False)
+
+    def outside_expr(self) -> pl.Expr:
+        if self.status_col is not None:
+            return pl.col(self.status_col) == "outside"
+        return (~pl.col(self.domain_col)).fill_null(False) if self.domain_col else pl.lit(False)
+
+    def applicable_expr(self) -> pl.Expr:
+        """Schedule applicability follows declared domain, never record presence."""
+        if self.status_col is not None:
+            return pl.col(self.status_col) != "outside"
+        return pl.col(self.domain_col) if self.domain_col else pl.lit(True)
+
+    @property
+    def quality_columns(self) -> list[str]:
+        return [
+            c
+            for c in (self.status_col, self.domain_col, self.collection_col, self.completeness_col)
+            if c is not None
+        ]
+
+    def check_cadence(
+        self,
+        events: pl.LazyFrame,
+        timestamp_col: str,
+        rule: CadenceRule | None = None,
+        *,
+        prefix: str = "cadence",
+        include_missing_times: bool = False,
+        events_outside: Literal["error", "ignore"] = "error",
+        on_gap: Literal["report", "raise"] = "report",
+    ) -> tuple[pl.DataFrame, dict[str, int]]:
+        """Report scheduled gaps without adding rows or changing declared quality."""
+        if on_gap not in {"report", "raise"}:
+            raise ValueError("on_gap must be report or raise")
+        reference, accepted, diagnostics, row_id = self._match_events(
+            events,
+            timestamp_col,
+            events_outside=events_outside,
+            event_id_col=None,
+            reserved_names=[],
+        )
+        summary = self._cadence_summary(
+            reference, accepted, row_id, timestamp_col, rule, prefix, include_missing_times, on_gap
+        )
+        return (
+            reference.join(summary, on=row_id, how="left", maintain_order="left").drop(row_id),
+            diagnostics,
+        )
+
+    def _cadence_summary(
+        self,
+        reference: pl.DataFrame,
+        accepted: pl.DataFrame,
+        row_id: str,
+        timestamp_col: str,
+        rule: CadenceRule | None,
+        prefix: str,
+        include_missing_times: bool,
+        on_gap: str,
+    ) -> pl.DataFrame:
+        summary = cadence_summary(
+            reference,
+            accepted,
+            row_id=row_id,
+            timestamp_col=timestamp_col,
+            start_col=self.start_col,
+            end_col=self.end_col,
+            applicable=self.applicable_expr(),
+            time_dtype=self.time_dtype,
+            rule=rule,
+            prefix=prefix,
+            include_missing_times=include_missing_times,
+        )
+        if on_gap == "raise" and summary.filter(pl.col(f"{prefix}_status") == "gaps").height:
+            raise ValueError("Cadence check found missing scheduled slots")
+        return summary
+
+    def _match_events(
+        self,
+        events: pl.LazyFrame,
+        timestamp_col: str,
+        *,
+        events_outside: Literal["error", "ignore"],
+        event_id_col: str | None,
+        reserved_names: Sequence[str],
+    ) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int], str]:
+        if events_outside not in {"error", "ignore"}:
+            raise ValueError("events_outside must be error or ignore")
         if timestamp_col in self.key_cols:
             raise ValueError("Event timestamp cannot also be a panel key")
         needed = list(
@@ -234,7 +443,7 @@ class ObservationPanel:
             )
         if event_id_col is not None and data[event_id_col].n_unique() != data.height:
             raise ValueError("Duplicate event identifiers: choose a deduplication policy first")
-        taken = set(data.columns) | set(self._cells.columns) | set(output_cols)
+        taken = set(data.columns) | set(self._cells.columns) | set(reserved_names)
         row_id = _internal_name(taken, "_panel_row")
         start = _internal_name(taken, "_panel_start")
         end = _internal_name(taken, "_panel_end")
@@ -245,7 +454,7 @@ class ObservationPanel:
             row_id,
             pl.col(self.start_col).alias(start),
             pl.col(self.end_col).alias(end),
-            pl.col(self.status_col).alias(status),
+            self.outside_expr().alias(status),
         )
         # Global time sorting guarantees within-key sorting as well.
         matched = data.sort(timestamp_col).join_asof(
@@ -257,9 +466,7 @@ class ObservationPanel:
             check_sortedness=False,
         )
         valid = (
-            pl.col(row_id).is_not_null()
-            & (pl.col(timestamp_col) < pl.col(end))
-            & (pl.col(status) != "outside")
+            pl.col(row_id).is_not_null() & (pl.col(timestamp_col) < pl.col(end)) & ~pl.col(status)
         )
         accepted = matched.filter(valid)
         excluded = data.height - accepted.height
@@ -267,35 +474,12 @@ class ObservationPanel:
             raise ValueError(
                 f"{excluded} input records lie outside the declared observation support"
             )
-        counts = accepted.group_by(row_id).agg(pl.len().cast(pl.Int64).alias(recorded_col))
-        output = reference.join(
-            counts, on=row_id, how="left", validate="1:1", maintain_order="left"
-        ).drop(row_id)
-        output = output.with_columns(pl.col(recorded_col).fill_null(0))
-        output = output.with_columns(
-            pl.when(pl.col(self.status_col) == "observed")
-            .then(pl.col(recorded_col))
-            .otherwise(None)
-            .cast(pl.Int64)
-            .alias(count_col)
-        )
-        if self.exposure_col is not None:
-            exposure = pl.col(self.exposure_col).cast(pl.Float64)
-            if output.filter((exposure == 0) & (pl.col(recorded_col) > 0)).height:
-                raise ValueError("Recorded events cannot have known zero exposure")
-            known = (pl.col(self.status_col) == "observed") & (exposure > 0)
-            output = output.with_columns(
-                pl.when(known).then(pl.col(count_col) / exposure).otherwise(None).alias(rate_col),
-                pl.when(known).then(exposure.log()).otherwise(None).alias(offset_col),
-            )
-            if output.filter(pl.col(rate_col).is_not_null() & ~pl.col(rate_col).is_finite()).height:
-                raise ValueError("Normalized event rate is not finite; check the exposure scale")
         diagnostics = {
             "input_records": data.height,
             "accepted_records": accepted.height,
             "excluded_records": excluded,
         }
-        return output, diagnostics
+        return reference, accepted, diagnostics, row_id
 
 
 def _internal_name(taken: set[str], stem: str) -> str:

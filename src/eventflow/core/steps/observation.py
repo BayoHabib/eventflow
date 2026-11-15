@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import polars as pl
 from pyproj import CRS
 
+from eventflow.core.cadence import CadenceRule, cadence_columns
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.observation import ObservationPanel
 from eventflow.core.pipeline import Step
@@ -32,6 +33,10 @@ class ObservationPanelStep(Step):
         offset_col: str = "log_exposure",
         events_outside: Literal["error", "ignore"] = "error",
         event_id_col: str | None = None,
+        cadence_rule: CadenceRule | dict[str, Any] | None = None,
+        cadence_prefix: str = "cadence",
+        include_missing_times: bool = False,
+        on_gap: Literal["report", "raise"] = "report",
     ) -> None:
         names = [count_col, recorded_col, rate_col, offset_col]
         if len(set(names)) != len(names) or any(not isinstance(c, str) or not c for c in names):
@@ -40,6 +45,13 @@ class ObservationPanelStep(Step):
         self.count_col, self.recorded_col = count_col, recorded_col
         self.rate_col, self.offset_col = rate_col, offset_col
         self.events_outside, self.event_id_col = events_outside, event_id_col
+        self.cadence_rule = (
+            CadenceRule(**cadence_rule) if isinstance(cadence_rule, dict) else cadence_rule
+        )
+        self.cadence_prefix, self.include_missing_times = cadence_prefix, include_missing_times
+        if on_gap not in {"report", "raise"}:
+            raise ValueError("on_gap must be report or raise")
+        self.on_gap = on_gap
 
     def run(self, event_frame: EventFrame) -> EventFrame:
         """Materialize counts, attach support semantics and preserve async compatibility."""
@@ -74,6 +86,10 @@ class ObservationPanelStep(Step):
             offset_col=self.offset_col,
             events_outside=self.events_outside,
             event_id_col=self.event_id_col,
+            cadence_rule=self.cadence_rule,
+            cadence_prefix=self.cadence_prefix,
+            include_missing_times=self.include_missing_times,
+            on_gap=self.on_gap,
         )
         if timestamp != self.panel.start_col:
             data = data.with_columns(pl.col(self.panel.start_col).alias(timestamp))
@@ -86,7 +102,7 @@ class ObservationPanelStep(Step):
             for c in [
                 *event_frame.schema.categorical_cols,
                 *self.panel.key_cols,
-                self.panel.status_col,
+                *self.panel.quality_columns,
             ]
             if c in data.columns and c not in numeric
         ]
@@ -103,6 +119,16 @@ class ObservationPanelStep(Step):
             "spatial_role": "support reference",
             "source_numeric_cols": list(event_frame.schema.numeric_cols),
             "source_provenance_retained_as_lineage": True,
+            "cadence_rule": (
+                self.cadence_rule.model_dump(mode="json") if self.cadence_rule else None
+            ),
+            "cadence_on_gap": self.on_gap,
+            "cadence_prefix": self.cadence_prefix if self.cadence_rule else None,
+            "cadence_include_missing_times": (
+                self.include_missing_times if self.cadence_rule else False
+            ),
+            "cadence_check": "evaluated" if self.cadence_rule else "unknown",
+            "cadence_does_not_certify_collection_or_completeness": True,
         }
         custom = {**event_frame.metadata.custom, "observation_panel": support}
         if reference.is_empty():
@@ -129,13 +155,18 @@ class ObservationPanelStep(Step):
         generated = [self.count_col, self.recorded_col]
         if self.panel.exposure_col:
             generated += [self.rate_col, self.offset_col]
+        if self.cadence_rule is not None:
+            generated += cadence_columns(self.cadence_prefix, self.include_missing_times)
         for name in generated:
             meaning = {
-                self.count_col: "Complete record count; null unless observed",
+                self.count_col: "Record count only for declared count-eligible support",
                 self.recorded_col: "Accepted input records, including incomplete coverage",
                 self.rate_col: "Complete record count divided by known positive exposure",
                 self.offset_col: "Natural log of known positive exposure for observed support",
-            }[name]
+            }.get(
+                name,
+                "Configured cadence diagnostic; does not certify collection or batch completeness",
+            )
             result = result.register_feature(
                 name,
                 {"source_step": "ObservationPanelStep"},
@@ -149,6 +180,10 @@ class ObservationPanelStep(Step):
                         "exposure_unit": self.panel.exposure_unit,
                         "bounds": "[start, end)",
                         "missing_policy": "preserve unknown totals",
+                        "quality_mode": "legacy" if self.panel.status_col else "independent",
+                        "cadence_rule": (
+                            self.cadence_rule.model_dump(mode="json") if self.cadence_rule else None
+                        ),
                     },
                 ),
             )

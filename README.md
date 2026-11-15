@@ -16,6 +16,8 @@ Numerical definitions, migration notes and remaining foundations are described i
 [Observation panels](docs/observation_panel.md) count point-event records on
 explicit space-time support while keeping observed zeros, missing totals and
 outside-domain rows distinct, with optional exposure, rates and log offsets.
+[Independent quality declarations and cadence checks](docs/observation_quality.md)
+keep collection activity, batch completeness and scheduled gaps separate.
 
 Pipelines support [asynchronous execution](docs/async_execution.md):
 
