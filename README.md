@@ -12,6 +12,8 @@ A generic library for preparing and transforming spatio-temporal datasets before
 
 Numerical definitions, migration notes and remaining foundations are described in
 [preprocessing contracts](docs/preprocessing_contracts.md).
+The [real-data audit fixes and migration guide](docs/real_data_audit_fixes.md)
+cover shared grid identity, recipe support and window-normalized K/L/H.
 
 [Observation panels](docs/observation_panel.md) count point-event records on
 explicit space-time support while keeping observed zeros, missing totals and

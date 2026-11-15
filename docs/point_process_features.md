@@ -97,7 +97,49 @@ Since parameters are not learned, where do they come from?
 | Step | Output | Description |
 |------|--------|-------------|
 | `PairCorrelationStep(max_distance)` | `pair_correlation` | Spatial clustering $g(r)$ |
-| `KFunctionStep(max_distance)` | `k_function` | Ripley's K statistic |
+| `KFunctionStep(max_distance, window=...)` | `k_function_local`, optional `l_function_local` / `h_function_local` | Window-normalized local K/L/H at one radius |
+
+---
+
+## Local K/L/H contract
+
+`KFunctionStep` requires a caller-declared `SpatialDomain` observation window in
+a projected CRS measured in meters. Coordinates are transformed into that CRS
+for computation without changing the input coordinate columns. All records must
+be finite and lie in the window; outside rows are never silently discarded.
+The step treats its input as one declared point pattern. Select the intended
+time interval/type beforehand. Window geometry alone does not certify that
+observation of the phenomenon is complete.
+
+For n >= 2, the local statistic is
+
+`K_i(r) = area(W)/(n-1) * sum(j != i, d_ij <= r, e_ij)`.
+
+The default `edge_correction="translation"` uses
+`e_ij = area(W)/area(W intersection (W + displacement_ij))`.
+Holes and disjoint window parts participate in both the area and intersection.
+Zero overlap raises explicitly. `edge_correction="none"` uses unit weights;
+this has edge bias and should be an explicit analytic choice. Ripley/isotropic
+and border corrections are not implemented and are rejected, including the old
+misleading default `"ripley"`.
+
+`L_i=sqrt(K_i/pi)` and `H_i=L_i-r` are applied consistently, including K_i=0.
+K has square-meter units; L and H have meter units. The mean of local K values
+is the corresponding global K estimator, but averaging transformed local L/H
+values is **not** the global L/H transform. Fewer than two points gives typed
+null statistics. Empty input retains typed empty feature columns. Coincident
+records count as distinct records; deduplication is a separate quality policy.
+
+This homogeneous estimator assumes a stationary point process. No significance
+or predictive calibration is inferred from H's sign. Inhomogeneous estimation
+and simulation envelopes remain separate work. Single-radius computation and
+translation intersections materialize the input and can take quadratic time;
+this is not a streaming or large-scale point-pattern engine. The old unused
+`n_bins` parameter is rejected; repeat the step over explicit radii to build a
+curve, keeping each result distinct.
+
+See the [migration guide and analytic references](real_data_audit_fixes.md) for
+examples, compatibility changes and the real-data replay command.
 
 ---
 

@@ -77,7 +77,7 @@ def test_realistic_chunks_to_six_hour_counts(
     data = result.collect()
 
     assert data["count"].to_list() == [1, 2, 1]
-    assert data["grid_id"].to_list() == [114000700, 114000700, 114000702]
+    assert data["grid_id"].to_list() == [6774440, 6774440, 6789174]
     assert data["time_bin"].to_list() == [
         datetime(2024, 1, 5),
         datetime(2024, 1, 5, 6),
@@ -103,7 +103,7 @@ def test_cell_ids_are_stable_across_batches(
     combined = recipe.run(load_chicago_crime(str(path))).collect()
     raw_events.head(1).write_parquet(path)
     subset = recipe.run(load_chicago_crime(str(path))).collect()
-    assert subset["grid_id"][0] == combined["grid_id"][0] == 114000700
+    assert subset["grid_id"][0] == combined["grid_id"][0] == 6774440
 
 
 def test_empty_input_produces_valid_empty_features(
@@ -137,7 +137,7 @@ def test_metric_grid_uses_projected_columns(raw_events: pl.DataFrame) -> None:
     )
     projected = transform_crs(frame, "EPSG:26971")
     grid = create_grid((350000, 570000, 352000, 571000), 500, crs="EPSG:26971")
-    assert assign_to_grid(projected, grid).collect()["grid_id"].to_list() == [0, 0, 2, 0]
+    assert assign_to_grid(projected, grid).collect()["grid_id"].to_list() == [0, 0, 14, 0]
 
 
 @pytest.mark.parametrize(
@@ -336,3 +336,38 @@ def test_legacy_weekend_flags_are_iso_correct() -> None:
     result = extract_temporal_components(frame, ["day_of_week", "is_weekend"]).collect()
     assert result["day_of_week"].to_list() == [5, 6, 7]
     assert result["is_weekend"].to_list() == [False, True, True]
+
+
+def test_recipe_preserves_support_for_queen_lag():
+    from eventflow.core.steps.spatial import SpatialLagStep
+
+    x, y = Transformer.from_crs("EPSG:26971", "EPSG:4326", always_xy=True).transform(
+        [350050.0, 350050.0, 350550.0], [570050.0] * 3
+    )
+    df = pl.DataFrame({"longitude": x, "latitude": y, "date": [datetime(2024, 1, 5, 1)] * 3})
+    events = EventFrame(
+        df.lazy(),
+        EventSchema(timestamp_col="date", lon_col="longitude", lat_col="latitude"),
+        EventMetadata(dataset_name="recipe-support"),
+    )
+    recipe = get_recipe(
+        "chicago_crime",
+        "chicago_crime_v1",
+        RecipeConfig(
+            dataset="chicago_crime",
+            recipe="chicago_crime_v1",
+            grid={"size_m": 500},
+            temporal={"time_bin": "1h"},
+        ),
+    )
+    aggregated = recipe.run(events)
+    out = (
+        SpatialLagStep(["count"], group_cols=["time_bin"])
+        .run(aggregated)
+        .collect()
+        .sort("grid_col")
+    )
+    assert out["count"].to_list() == [2, 1]
+    assert out["count_spatial_lag"].to_list() == [1.0, 2.0]
+    assert {"grid_row", "grid_col"} <= set(out.columns)
+    assert aggregated.metadata.custom["grid_spec"]["id_scheme"] == "signed_cantor_v1"

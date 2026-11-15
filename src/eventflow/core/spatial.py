@@ -1,24 +1,17 @@
 """Spatial operations for event data."""
 
 import math
+from typing import cast
 
 import polars as pl
 from pyproj import CRS, Transformer
 from shapely import STRtree, from_wkt, geometry
 
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.grid import GridSpec, grid_cell_id, grid_id_expr, require_metric_crs
 from eventflow.core.utils import get_logger
 
 logger = get_logger(__name__)
-
-
-def require_metric_crs(crs: str) -> None:
-    """Reject meter-based operations on geographic or non-meter coordinates."""
-    definition = CRS.from_user_input(crs)
-    if not definition.is_projected or not all(
-        math.isclose(axis.unit_conversion_factor, 1.0) for axis in definition.axis_info[:2]
-    ):
-        raise ValueError("Grid operations require a projected CRS in meters; transform CRS first")
 
 
 def transform_crs(
@@ -70,122 +63,112 @@ def create_grid(
     bounds: tuple[float, float, float, float],
     size_m: float,
     crs: str = "EPSG:4326",
+    *,
+    origin: tuple[float, float] | None = None,
 ) -> pl.DataFrame:
-    """
-    Create a spatial grid covering the given bounds.
+    """Create canonical half-open metric cells covering bounds.
 
-    Args:
-        bounds: Bounding box (minx, miny, maxx, maxy)
-        size_m: Grid cell size in meters (assumes projected CRS)
-        crs: Coordinate reference system
-
-    Returns:
-        DataFrame with grid cells (grid_id, minx, miny, maxx, maxy, geometry)
+    Supply the same origin across calls to keep identities stable as bounds change.
+    The generated reference includes its lattice parameters and signed cell indices.
+    IDs use signed_cantor_v1; legacy row-major/100000-stride tables must be migrated.
     """
     require_metric_crs(crs)
-    if not math.isfinite(size_m) or size_m <= 0:
-        raise ValueError("Grid cell size must be positive and finite")
     minx, miny, maxx, maxy = bounds
     if not all(math.isfinite(v) for v in bounds) or minx > maxx or miny > maxy:
         raise ValueError("Grid bounds must be finite and ordered")
-
-    # Calculate number of cells
-    n_cols = int((maxx - minx) / size_m) + 1
-    n_rows = int((maxy - miny) / size_m) + 1
-
-    logger.info(
-        f"Creating spatial grid: {n_cols}x{n_rows} cells ({n_cols * n_rows} total) at {size_m}m resolution"
-    )
-
-    # Generate grid cells
+    spec = GridSpec(size_m, origin if origin is not None else (minx, miny), crs)
+    first_col, last_col = [math.floor((v - spec.origin[0]) / size_m) for v in (minx, maxx)]
+    first_row, last_row = [math.floor((v - spec.origin[1]) / size_m) for v in (miny, maxy)]
+    grid_cell_id(first_row, first_col)
+    grid_cell_id(last_row, last_col)
     cells = []
-    grid_id = 0
-
-    for i in range(n_rows):
-        for j in range(n_cols):
-            cell_minx = minx + j * size_m
-            cell_miny = miny + i * size_m
-            cell_maxx = cell_minx + size_m
-            cell_maxy = cell_miny + size_m
-
+    for row in range(first_row, last_row + 1):
+        for col in range(first_col, last_col + 1):
+            x, y = spec.origin[0] + col * size_m, spec.origin[1] + row * size_m
             cells.append(
                 {
-                    "grid_id": grid_id,
-                    "minx": cell_minx,
-                    "miny": cell_miny,
-                    "maxx": cell_maxx,
-                    "maxy": cell_maxy,
-                    "geometry": geometry.box(cell_minx, cell_miny, cell_maxx, cell_maxy).wkt,
+                    "grid_id": grid_cell_id(row, col),
+                    "grid_row": row,
+                    "grid_col": col,
+                    "minx": x,
+                    "miny": y,
+                    "maxx": x + size_m,
+                    "maxy": y + size_m,
+                    "geometry": geometry.box(x, y, x + size_m, y + size_m).wkt,
+                    "grid_origin_x": spec.origin[0],
+                    "grid_origin_y": spec.origin[1],
+                    "grid_crs": spec.crs,
                 }
             )
-            grid_id += 1
-
     return pl.DataFrame(cells)
 
 
-def assign_to_grid(
-    event_frame: EventFrame,
-    grid: pl.DataFrame,
-) -> EventFrame:
-    """
-    Assign events to grid cells.
+def assign_to_grid(event_frame: EventFrame, grid: pl.DataFrame) -> EventFrame:
+    """Assign canonical IDs present in a validated square-cell reference.
 
-    Args:
-        event_frame: Input EventFrame with coordinates
-        grid: Grid DataFrame from create_grid()
-
-    Returns:
-        EventFrame with grid_id column added
+    Rows outside the supplied reference receive null grid_id, never a fabricated
+    ID that happens to alias an in-domain cell. Row order and grid indices survive.
     """
     schema = event_frame.schema
-
-    if schema.lat_col is None or schema.lon_col is None:
+    if schema.lon_col is None or schema.lat_col is None:
         raise ValueError("EventFrame must have lat/lon columns for grid assignment")
-
     require_metric_crs(event_frame.metadata.crs)
     if grid.is_empty():
         raise ValueError("Grid must contain at least one cell")
-
-    # Get grid parameters
-    grid_data = grid.to_dict(as_series=False)
-
-    # Assign events to grid cells using spatial join logic
-    # This is a simplified version - in production, use spatial index for efficiency
-    lf = event_frame.lazy_frame
-
-    # For each event, find the grid cell it falls into
-    # This implementation assumes projected coordinates
-    grid_size = grid_data["maxx"][0] - grid_data["minx"][0]
-    if grid_size <= 0:
-        raise ValueError("Grid definition must contain positive cell size")
-
-    min_x = min(grid_data["minx"])
-    min_y = min(grid_data["miny"])
-    unique_minx = set(grid_data["minx"])
-    n_cols = max(len(unique_minx), 1)
-
-    lf = (
-        lf.with_columns(
-            [
-                (((pl.col(schema.lon_col) - min_x) / grid_size).floor().cast(pl.Int32)).alias(
-                    "_col_idx"
-                ),
-                (((pl.col(schema.lat_col) - min_y) / grid_size).floor().cast(pl.Int32)).alias(
-                    "_row_idx"
-                ),
-            ]
-        )
+    size = float(grid["maxx"][0] - grid["minx"][0])
+    origin_cols = {"grid_origin_x", "grid_origin_y", "grid_crs"}
+    if origin_cols & set(grid.columns) and not origin_cols <= set(grid.columns):
+        raise ValueError("Grid reference must include all origin/CRS fields or none")
+    if origin_cols <= set(grid.columns):
+        if any(grid[c].null_count() or grid[c].n_unique() != 1 for c in origin_cols):
+            raise ValueError("Grid reference must have one non-null origin and CRS")
+        if CRS.from_user_input(grid["grid_crs"][0]) != CRS.from_user_input(
+            event_frame.metadata.crs
+        ):
+            raise ValueError("Grid and event CRS must agree")
+        origin = (float(grid["grid_origin_x"][0]), float(grid["grid_origin_y"][0]))
+    else:
+        origin = (float(cast(float, grid["minx"].min())), float(cast(float, grid["miny"].min())))
+    spec = GridSpec(size, origin, event_frame.metadata.crs)
+    # A sparse or shuffled reference is allowed, but its cell identity must agree.
+    reference = (
+        grid.lazy()
         .with_columns(
-            [
-                (pl.col("_row_idx") * pl.lit(n_cols, dtype=pl.Int32) + pl.col("_col_idx")).alias(
-                    "grid_id"
-                )
-            ]
+            ((pl.col("minx") - origin[0]) / size).round(0).cast(pl.Int64).alias("grid_col"),
+            ((pl.col("miny") - origin[1]) / size).round(0).cast(pl.Int64).alias("grid_row"),
         )
-        .drop(["_col_idx", "_row_idx"])
+        .with_columns(grid_id_expr())
+        .collect()
     )
-
-    return event_frame.with_lazy_frame(lf)
+    for col in ("minx", "miny", "maxx", "maxy"):
+        if grid[col].null_count() or not grid[col].is_finite().all():
+            raise ValueError("Grid bounds must be finite and non-null")
+    for row in reference.iter_rows(named=True):
+        x, y = origin[0] + row["grid_col"] * size, origin[1] + row["grid_row"] * size
+        if not all(
+            math.isclose(row[c], value, rel_tol=0, abs_tol=max(1e-8, size * 1e-10))
+            for c, value in [("minx", x), ("miny", y), ("maxx", x + size), ("maxy", y + size)]
+        ):
+            raise ValueError("Grid cells must be aligned squares with one common size")
+    if grid["grid_id"].null_count() or grid["grid_id"].n_unique() != grid.height:
+        raise ValueError("Grid IDs must be unique and non-null")
+    if grid["grid_id"].to_list() != reference["grid_id"].to_list():
+        raise ValueError(
+            "Legacy or incompatible grid IDs; regenerate with create_grid and migrate by cell geometry"
+        )
+    if {"grid_row", "grid_col"} <= set(grid.columns):
+        if any(grid[c].to_list() != reference[c].to_list() for c in ("grid_row", "grid_col")):
+            raise ValueError("Grid indices disagree with cell geometry")
+    lf = spec.assign(event_frame.lazy_frame, schema.lon_col, schema.lat_col).drop("grid_id")
+    lf = lf.join(
+        reference.lazy().select("grid_row", "grid_col", "grid_id"),
+        on=["grid_row", "grid_col"],
+        how="left",
+        maintain_order="left",
+    )
+    return event_frame.with_lazy_frame(lf).with_metadata(
+        grid_size_m=size, custom={**event_frame.metadata.custom, "grid_spec": spec.metadata()}
+    )
 
 
 def assign_to_zones(

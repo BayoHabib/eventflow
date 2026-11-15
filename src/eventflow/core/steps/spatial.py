@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from shapely import STRtree, geometry
 from shapely.wkt import loads as wkt_loads
 
+from eventflow.core.grid import GridSpec
 from eventflow.core.pipeline import Step
 from eventflow.core.schema import FeatureProvenance
 from eventflow.core.spatial import require_metric_crs, transform_crs
@@ -236,40 +237,26 @@ class AssignToGridStep(Step):
             )
             min_x, min_y = stats[0], stats[1]
 
+        if min_x is None or min_y is None:
+            raise ValueError(
+                "Cannot infer a grid origin from empty coordinates; supply origin explicitly"
+            )
         grid_size = self.grid_size_m
-
-        lf = (
-            lf.with_columns(
-                [
-                    (((pl.col(lon_col) - min_x) / grid_size).floor().cast(pl.Int64)).alias(
-                        "_col_idx"
-                    ),
-                    (((pl.col(lat_col) - min_y) / grid_size).floor().cast(pl.Int64)).alias(
-                        "_row_idx"
-                    ),
-                ]
-            )
-            .with_columns(
-                [
-                    # Compute unique grid_id from row/col indices
-                    # Using a large multiplier to ensure uniqueness
-                    (
-                        pl.col("_row_idx") * pl.lit(100000, dtype=pl.Int64) + pl.col("_col_idx")
-                    ).alias("grid_id")
-                ]
-            )
-            .rename({"_col_idx": "grid_col", "_row_idx": "grid_row"})
-        )
+        spec = GridSpec(grid_size, (min_x, min_y), event_frame.metadata.crs)
+        lf = spec.assign(lf, lon_col, lat_col)
 
         provenance = FeatureProvenance(
             produced_by="AssignToGridStep",
             inputs=[lon_col, lat_col],
             tags={"spatial"},
             description=f"Grid assignment at {grid_size}m resolution",
-            metadata={"grid_size_m": grid_size, "origin": (min_x, min_y)},
+            metadata=spec.metadata(),
         )
 
-        result = event_frame.with_lazy_frame(lf).with_metadata(grid_size_m=grid_size)
+        result = event_frame.with_lazy_frame(lf).with_metadata(
+            grid_size_m=grid_size,
+            custom={**event_frame.metadata.custom, "grid_spec": spec.metadata()},
+        )
         result = result.register_feature(
             "grid_id",
             {
