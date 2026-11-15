@@ -8,6 +8,26 @@ from eventflow.core.utils import get_logger
 logger = get_logger(__name__)
 
 
+# Components this legacy function actually implements. Deliberately NOT
+# TEMPORAL_COMPONENTS from core/schema.py: that set also contains
+# "week_of_year" and "quarter", which this function does not produce.
+# "is_holiday" is not in the set either: it used to be listed in the
+# docstring below, but no branch ever implemented it (a holiday
+# calendar would be needed). A requested component that is not produced
+# must fail here, never be silently skipped (issue #33).
+LEGACY_TEMPORAL_COMPONENTS = frozenset(
+    {
+        "hour_of_day",
+        "day_of_week",
+        "day_of_month",
+        "day_of_year",
+        "month",
+        "year",
+        "is_weekend",
+    }
+)
+
+
 def extract_temporal_components(
     event_frame: EventFrame,
     components: list[str],
@@ -25,11 +45,22 @@ def extract_temporal_components(
             - "month": Month (1-12)
             - "year": Year
             - "is_weekend": Boolean for weekend
-            - "is_holiday": Boolean for holiday (requires holiday calendar)
+
+    Raises:
+        ValueError: If a requested component is not supported, including
+            "is_holiday", which requires a holiday calendar and is not
+            implemented.
 
     Returns:
         EventFrame with temporal component columns added
     """
+    unknown = sorted(set(components) - LEGACY_TEMPORAL_COMPONENTS)
+    if unknown:
+        raise ValueError(
+            "Unknown temporal component(s): " + ", ".join(unknown) + ". "
+            "Supported temporal components: " + ", ".join(sorted(LEGACY_TEMPORAL_COMPONENTS)) + "."
+        )
+
     timestamp_col = event_frame.schema.timestamp_col
     lf = event_frame.lazy_frame
 
