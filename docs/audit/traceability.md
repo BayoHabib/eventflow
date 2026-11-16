@@ -1,6 +1,6 @@
-# Traceability matrix — EventFlow objectives → code → tests → proof
+# Traceability matrix — Shikong objectives → code → tests → proof
 
-**Source audit:** `~/workspace/your_files/eventflow-eda-chicago/Audit-EventFlow.md`
+**Source audit:** `~/workspace/your_files/eventflow-eda-chicago/Audit-Shikong.md`
 (2026-11-15, commit `9903a6c`, verdict 7.5/10 — 28 objectives: 15 attained,
 6 partial, 6 not attained, 1 unverifiable).
 **Phase-0 baseline (re-measured 2026-11-15 in this tree):** 535 tests
@@ -30,11 +30,11 @@ objective does not count as implementing the objective itself.
 | 11 | Domaines spatiaux génériques | Atteint | Atteint | Inchangé. |
 | 12 | Audit données réelles, sémantique, identité de grille, K/L/H | Atteint | Atteint | Inchangé. |
 | 13 | Recette Chicago : 300 m, bins 6 h, EPSG:4326 → EPSG:26971 | Atteint | Atteint | **Rejouée par `make audit`** sur les données T1 2024 : 56 491 lignes, somme `count` = 60 235 (voir `audit/phase-0/replay_chicago.json`). |
-| 14 | CLI : version, list-datasets, list-recipes, validate, run | Atteint | Atteint | Inchangé, et `validate` vérifie désormais aussi que le pipeline se construit (`src/eventflow/cli/main.py`). |
+| 14 | CLI : version, list-datasets, list-recipes, validate, run | Atteint | Atteint | Inchangé, et `validate` vérifie désormais aussi que le pipeline se construit (`src/shikong/cli/main.py`). |
 | 15 | Enrichissement contextuel (météo, événements, démographie) | Partiel | Partiel | **Marqué expérimental** : les 3 sources Chicago portent une mention EXPERIMENTAL explicite ; toujours non câblées, non testées, contexte désactivé dans la recette. Aucune prétention ajoutée. |
 | 16 | Suivi d'expériences MLflow | Partiel | Partiel | **Marqué expérimental** (`mlflow_tracker.py`) ; ajout de `tests/tracking/test_tracking.py` (import sans MLflow OK, `ImportError` claire à l'instanciation sans MLflow). Toujours aucun test contre un vrai backend MLflow. |
 | 17 | Utilitaires `core/features.py` | Non atteint | Partiel | **Tranché** : `aggregate_counts`, `moving_window_aggregation`, `lag_features` supprimés (remplacés par des Steps testés) ; `compute_ratios` corrigé (dénominateur nul → null) et testé (`tests/core/test_features_utils.py`) ; `aggregate_by_category`, `encode_categorical`, `normalize_features` marqués EXPERIMENTAL avec leurs limites documentées ; docs mises à jour (`docs/api_reference.md`, `docs/architecture.md`). |
-| 18 | Documentation API et docstrings | Partiel | Partiel | **README réparé** (Quick Start exécuté, chiffres, section « ce qu'EventFlow ne fait pas », notebook qualifié de non vérifié) ; **URLs corrigées** dans `pyproject.toml` (`BayoHabib/eventflow`, URL ReadTheDocs supprimée car inexistante). Reste partiel : pas de Sphinx/MkDocs, pas de ReadTheDocs. |
+| 18 | Documentation API et docstrings | Partiel | Partiel | **README réparé** (Quick Start exécuté, chiffres, section « ce qu'Shikong ne fait pas », notebook qualifié de non vérifié) ; **URLs corrigées** dans `pyproject.toml` (`BayoHabib/shikong`, URL ReadTheDocs supprimée car inexistante). Reste partiel : pas de Sphinx/MkDocs, pas de ReadTheDocs. |
 | 19 | Logging structuré, exceptions personnalisées | Partiel | Partiel | Inchangé (hors phase 0). Note : les erreurs de configuration sont désormais des `ValueError`/`ValidationError` explicites avec la liste des clés valides. |
 | 20 | CI : tests + lint + types sur 3 OS × 3 Python, build | Atteint | Atteint | **Échec `test_to_pandas` corrigé** (pandas déclaré + test conditionnel). Réserve inchangée : l'état réel de la CI distante n'a pas été consulté. |
 | 21 | TODO haute priorité : alias adapters | Non atteint | Non atteint | Hors phase 0 — non commencé, comme décidé. |
@@ -164,7 +164,7 @@ pas — et 8/9 sur le contrôle positif, vérifiés à la main).
   déclarée : deuxième domaine (capteurs fixes, mesures avec NA) et
   troisième représentation (trajectoires mobiles) rejoués avec les
   mêmes Steps, sans hypothèse Chicago ; les deux recettes sont
-  enregistrées et validées par la CLI (`eventflow validate` : 6 et
+  enregistrées et validées par la CLI (`shikong validate` : 6 et
   10 étapes). Voir `docs/design-notes/phase3-beijing.md` et
   `docs/design-notes/phase3-geolife-boundary.md`.
 - **Objectif 13 — Atteint (chiffres mis à jour).** Recette rejouée par
@@ -255,9 +255,9 @@ Replays Beijing et GeoLife rejoués et identiques aux valeurs phase 3
 GeoLife sous-ensemble 1 471 lignes × 26 colonnes, panel count
 112 lignes ; voir `audit/phase-5/beijing_replay.json` et
 `audit/phase-5/geolife_replay.json`). Paquet construit depuis une
-copie propre : `eventflow-0.1.0.tar.gz` + `eventflow-0.1.0-py3-none-any.whl`,
+copie propre : `shikong-0.1.0.tar.gz` + `shikong-0.1.0-py3-none-any.whl`,
 `twine check` PASSED sur les deux ; installation propre vérifiée dans
-un venv neuf (wheel seule, `eventflow --help`, `validate` 21 étapes,
+un venv neuf (wheel seule, `shikong --help`, `validate` 21 étapes,
 quick start 120 événements → 516 lignes, somme `count` = 120).
 
 - **Objectif 21 — Non atteint → Atteint.** Les alias sont ajoutés et

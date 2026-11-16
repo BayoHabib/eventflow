@@ -1,6 +1,6 @@
 # Point-Process Feature Engineering
 
-This document explains the point-process features in EventFlow. These are **feature engineering steps**, not model fitting.
+This document explains the point-process features in Shikong. These are **feature engineering steps**, not model fitting.
 
 ## Key Principle
 
@@ -159,8 +159,8 @@ For online/incremental computation:
 ## Example Pipeline
 
 ```python
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import (
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import (
     InterEventTimeStep,
     ExponentialDecayStep,
     HawkesKernelStep,
@@ -195,7 +195,7 @@ features = result.collect().select([
 
 ### Feature Engineering vs Modeling
 
-| Aspect | Feature Engineering (EventFlow) | Modeling |
+| Aspect | Feature Engineering (Shikong) | Modeling |
 |--------|--------------------------------|----------|
 | Parameters | User-specified | Learned from data |
 | Output | Feature columns | Predictions / likelihood |
@@ -217,7 +217,7 @@ features = result.collect().select([
 Separate from steps, validation functions check feature quality:
 
 ```python
-from eventflow.core.steps.validation import (
+from shikong.core.steps.validation import (
     validate_intensity_positivity,
     validate_hawkes_stability,
     validate_survival_monotonicity,

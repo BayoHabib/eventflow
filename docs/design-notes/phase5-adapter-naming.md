@@ -3,7 +3,7 @@
 Date: 2026-11-15. Scope: naming-only change to the five adapter outputs
 (`TableOutput`, `SequenceOutput`, `RasterOutput`, `GraphOutput`,
 `StreamOutput`). No adapter computation was changed; no existing field was
-renamed or removed. Implementation: `src/eventflow/core/adapters/`
+renamed or removed. Implementation: `src/shikong/core/adapters/`
 (`sequence.py`, `stream.py`, `raster.py`, `graph.py`, `table.py`).
 Tests: `tests/core/test_adapter_aliases.py` (21 tests).
 
@@ -143,4 +143,4 @@ them — a follow-up decision, not taken here.
   all passing, coverage ≥ 86% — see the Phase 5 exit-criteria note for the
   final numbers.
 - `ruff check`, `black --check` (line-length 100), and
-  `mypy src/eventflow/core/adapters` are clean on all touched files.
+  `mypy src/shikong/core/adapters` are clean on all touched files.

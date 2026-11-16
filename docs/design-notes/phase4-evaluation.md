@@ -1,7 +1,7 @@
 # Phase 4 — Blocked splits, walk-forward evaluation, metrics
 
 Phase 4 criteria 3, 4 and 8 (metric functions). Implementation:
-`src/eventflow/evaluation/` (`splits.py`, `walkforward.py`, `metrics.py`).
+`src/shikong/evaluation/` (`splits.py`, `walkforward.py`, `metrics.py`).
 Tests: `tests/evaluation/test_splits.py`, `test_walkforward.py`,
 `test_metrics.py` (37 tests).
 
@@ -63,7 +63,7 @@ yielded fold is checked with `validate_split` on the time column.
 `evaluate_walk_forward(steps, frame, time_col, initial_train, step,
 score_fn, ...)` runs a fresh `Pipeline` per fold. **Refit policy:** each
 step that implements `fit` (detected with `hasattr(step, "fit")`, per the
-`FittableStep` protocol in `eventflow.core.pipeline`: `fit(event_frame) ->
+`FittableStep` protocol in `shikong.core.pipeline`: `fit(event_frame) ->
 Self`, `is_fitted -> bool`) is fit on the train fold only, before the
 fold runs — fresh fit per fold, fitted statistics from a previous fold
 are overwritten, never carried over. The pipeline then runs on the train
@@ -138,6 +138,6 @@ Both metrics are pure functions on numpy arrays; no sklearn/scipy
 
 37 tests, all passing; `ruff check`, `black --check` and `mypy` clean on
 the touched files (see the worker report). The `FittableStep` protocol
-already exists in `src/eventflow/core/pipeline.py` (added by the worker
+already exists in `src/shikong/core/pipeline.py` (added by the worker
 owning criterion 5 during this phase); the harness detects fittable steps
 by `hasattr(step, "fit")` and is compatible with it.

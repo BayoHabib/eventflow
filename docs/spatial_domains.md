@@ -1,6 +1,6 @@
 # Generic spatial-domain preprocessing
 
-EventFlow prepares spatio-temporal data for downstream analyses. Its generic core
+Shikong prepares spatio-temporal data for downstream analyses. Its generic core
 provides composable operations; datasets and recipes supply source data, domains,
 parameters, and domain-specific interpretations.
 
@@ -13,7 +13,7 @@ these operations.
 ## Define a footprint
 
 ```python
-from eventflow.core import SpatialDomain
+from shikong.core import SpatialDomain
 
 domain = SpatialDomain.from_wkt(
     allowed_wkt=["POLYGON ((0 0, 4 0, 4 2, 0 2, 0 0))"],
@@ -36,8 +36,8 @@ between differently encoded polygons.
 ## Annotate or explicitly filter event locations
 
 ```python
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import SpatialDomainMaskStep
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import SpatialDomainMaskStep
 
 pipeline = Pipeline([
     SpatialDomainMaskStep(domain),  # Annotation is the default.
@@ -71,7 +71,7 @@ provenance and context notes. An existing output column is never overwritten.
 
 ```python
 import polars as pl
-from eventflow.core import annotate_grid_coverage
+from shikong.core import annotate_grid_coverage
 
 cells = pl.DataFrame({
     "cell": [10, 20, 30],

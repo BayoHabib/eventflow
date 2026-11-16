@@ -72,7 +72,7 @@ but that was not tested and is not claimed here.
 
 ## What the recipe ships
 
-`GeoLifeV1Recipe` (`src/eventflow/datasets/geolife/recipes/geolife_v1.py`)
+`GeoLifeV1Recipe` (`src/shikong/datasets/geolife/recipes/geolife_v1.py`)
 contains only the APPLIES rows: CRS transform → kinematics →
 temporal components → cyclical calendar → inter-arrival → rows-mode
 lag / rolling mean of speed → 5-min bins → 100 m grid → fix counts

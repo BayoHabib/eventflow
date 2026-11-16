@@ -1,6 +1,6 @@
 # Phase 3 — Beijing Multi-Site Air Quality (UCI 501)
 
-Second-domain proof for EventFlow: the same generic Steps that built
+Second-domain proof for Shikong: the same generic Steps that built
 the Chicago crime panel build a sensor panel, with no Chicago-specific
 assumption (no grid, no crime columns, no spatial step).
 

@@ -28,7 +28,7 @@ GeoLife subset: 1,471 rows, count panel 112 rows, sum 1,471.
    sdist + wheel from a clean checkout; `twine check dist/*` is clean.
    No upload is performed (maintainer decides the release moment).
 6. **Clean install verified.** The built wheel installs in a fresh venv and
-   `eventflow --help` plus a smoke example run there.
+   `shikong --help` plus a smoke example run there.
 7. **Reproducible example environment.** A clean-install procedure and
    executable examples exist and were actually executed (Dockerfile for the
    examples if useful); the procedure states what it proves and what it

@@ -24,9 +24,9 @@ intermediate operation is safe in Int64. Excessive indices raise; they never
 wrap or collide. Numeric proximity/order of IDs has no spatial interpretation.
 
 ```python
-from eventflow.core import GridSpec
-from eventflow.core.spatial import create_grid, assign_to_grid
-from eventflow.core.steps.spatial import AssignToGridStep
+from shikong.core import GridSpec
+from shikong.core.spatial import create_grid, assign_to_grid
+from shikong.core.steps.spatial import AssignToGridStep
 
 # projected_events already uses this metric CRS.
 origin = (350000.0, 570000.0)
@@ -66,7 +66,7 @@ For a table with reliable cell centers and known projection, origin and size:
 
 ```python
 import polars as pl
-from eventflow.core import GridSpec
+from shikong.core import GridSpec
 
 spec = GridSpec(300, (0.0, 0.0), "EPSG:26971")
 migrated = spec.assign(
@@ -105,8 +105,8 @@ uncorrected alternative.
 
 ```python
 from shapely.geometry import box
-from eventflow.core import SpatialDomain
-from eventflow.core.steps.point_process import KFunctionStep
+from shikong.core import SpatialDomain
+from shikong.core.steps.point_process import KFunctionStep
 
 window = SpatialDomain(box(350000, 570000, 360000, 580000), "EPSG:26971")
 result = KFunctionStep(
@@ -118,7 +118,7 @@ result = KFunctionStep(
 Configured pipelines use the existing serializable domain representation:
 
 ```python
-from eventflow.core.steps import get_default_registry
+from shikong.core.steps import get_default_registry
 step = get_default_registry().create("k_function", params={
     "max_distance": 1000,
     "window": {"allowed_wkt": [window.geometry.wkt], "crs": window.crs},
@@ -162,7 +162,7 @@ large indices, the previous stride collision, reference coverage joins, bounds,
 legacy-ID rejection, batch stability and the recipe-to-lag composition.
 
 The frozen inputs are in the separately delivered
-`EventFlow_Real_Data_Validation_Bundle.zip`. Extract it and run:
+`Shikong_Real_Data_Validation_Bundle.zip`. Extract it and run:
 
 ```bash
 python scripts/check_real_data_audit.py --audit-root /path/to/extracted/bundle

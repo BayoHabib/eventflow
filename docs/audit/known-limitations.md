@@ -1,4 +1,4 @@
-# Known limitations — EventFlow (phase 0, 2026-11-15)
+# Known limitations — Shikong (phase 0, 2026-11-15)
 
 This file lists, frankly, what is **not** proven, not implemented, or still
 silently ignored. It is the first thing an auditor should read. Items are
@@ -58,7 +58,7 @@ rewriting the README.
 ## Identity and documentation gaps (known, out of phase-0 scope)
 
 - **Author identity**: `pyproject.toml` still says
-  `EventFlow Team <team@eventflow.dev>`. Changing it is Habib's decision.
+  `Shikong Team <team@shikong.dev>`. Changing it is Habib's decision.
 - **No generated API docs**: no Sphinx/MkDocs, no ReadTheDocs site (the
   dead ReadTheDocs URL was removed from `pyproject.toml` in phase 0).
 - **`tests/datasets/` now holds the phase-3 dataset tests**
@@ -123,7 +123,7 @@ rewriting the README.
   (hash) order. The step makes no order guarantee; changing shared
   join behaviour was out of scope for phase 3.
 - **Audit manifest label is stale.** `scripts/audit.py` still writes
-  `"audit": "eventflow phase-1 audit"` in `manifest.json`, including
+  `"audit": "shikong phase-1 audit"` in `manifest.json`, including
   in the phase-3 pack. Cosmetic only; the measured numbers in the
   manifest are the phase-3 run's.
 
@@ -197,7 +197,7 @@ rewriting the README.
   (`audit/phase-5/build.log`, `twine_check.log`), CHANGELOG.md and the
   release procedure exist (`docs/release.md`), but no upload has been
   performed and no author contact email exists yet (the placeholder
-  `team@eventflow.dev` was removed from `pyproject.toml` rather than
+  `team@shikong.dev` was removed from `pyproject.toml` rather than
   shipped as a fake address). Publishing is the maintainer's gesture.
 - **Dockerfile not built.** `examples/Dockerfile` (examples only, no
   service) exists and is documented, but there is no Docker in this VM;
@@ -235,7 +235,7 @@ rewriting the README.
   API accepts collected DataFrames (converted with `.lazy()`). Panel
   semantics are unchanged: generated rows still carry a null `time_bin`.
 - **Audit manifest label still stale.** `scripts/audit.py` labels its
-  manifest "eventflow phase-1 audit" although the numbers are the
+  manifest "shikong phase-1 audit" although the numbers are the
   phase-5 run's (same staleness noted in phases 3 and 4).
 - **No Sphinx/MkDocs site, no ReadTheDocs.** Docs are Markdown in
   `docs/`; every code example is executed by a test, but there is no
@@ -267,7 +267,7 @@ rewriting the README.
   bins, seeds 42 and 7; they are not a claim about recovery on real
   data at other scales.
 - **Audit manifest label still stale.** `scripts/audit.py` labels its
-  manifest "eventflow phase-1 audit" although the numbers are the
+  manifest "shikong phase-1 audit" although the numbers are the
   phase-4 run's (same staleness noted in phase 3).
 - **`encode_categorical` still learns its vocabulary over the whole
   frame.** It is EXPERIMENTAL, used by no recipe or Step, and was

@@ -1,6 +1,6 @@
 # Observation panels and exposure
 
-EventFlow can count raw point-event records on **caller-declared observation
+Shikong can count raw point-event records on **caller-declared observation
 support**. The panel lists the intended spatial units/strata, observation
 intervals and collection status. It does not infer the observed domain from the
 locations or timestamps at which events happened.
@@ -42,7 +42,7 @@ or other stratum; each combination has its own independent support.
 | `missing` | Accepted input rows, possibly zero | null | Collection is unknown or incomplete; a reliable total is unavailable |
 | `outside` | zero | null | Support is excluded from the observation domain |
 
-The completeness declaration is supplied by the caller. EventFlow cannot prove
+The completeness declaration is supplied by the caller. Shikong cannot prove
 that a sensor was operational or that an external source reported all events.
 Each run treats its input as the full batch for that support, not an incremental
 update. Declare `observed` only when the supplied batch covers the corresponding
@@ -60,7 +60,7 @@ records does not sum rain, average temperature, or reconstruct missing signals.
 
 Exposure is optional. When supplied, its numerical column and unit are explicit:
 sensor-hours, person-years, surveyed area-time, population, or another relevant
-denominator. EventFlow never substitutes geometric cell coverage or elapsed
+denominator. Shikong never substitutes geometric cell coverage or elapsed
 interval length for exposure.
 
 - A known exposure must be finite, non-negative and representable in Float64;
@@ -85,9 +85,9 @@ do not automatically remove unknown totals or provide a missing-data model.
 ```python
 from datetime import datetime, timedelta
 import polars as pl
-from eventflow.core import EventFrame, EventMetadata, EventSchema, ObservationPanel
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import ObservationPanelStep
+from shikong.core import EventFrame, EventMetadata, EventSchema, ObservationPanel
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import ObservationPanelStep
 
 t = datetime(2024, 1, 1)
 support = pl.DataFrame({
@@ -168,7 +168,7 @@ grid resolution, or exposure unit. Prepare an appropriate CRS for real data.
 For registry composition, supply the panel as a runtime object:
 
 ```python
-from eventflow.core.steps import get_default_registry
+from shikong.core.steps import get_default_registry
 step = get_default_registry().create("observation_panel", params={"panel": panel})
 ```
 
