@@ -36,6 +36,41 @@ may still change.
   SMASH loaders and ETAS catalog columns remain unverified (inventory
   §7) and are not guessed.
 
+- **STPP data preparation for deep-learning STPP**
+  (`src/shikong/stpp/dl_formats.py`, second STPP increment — data
+  only, no fitted model, no training). Extends the exact-event
+  emitters with the formats the five neural STPP reference loaders
+  actually read: `emit_wrapper_npz` — one `<name>.npz` with
+  `train`/`val`/`test` object arrays of `[n, 3]` float64 `[t, x, y]`
+  sequences, the shared DeepSTPP/AutoSTPP `SlidingWindowWrapper`
+  contract (the wrapper itself windows lookback 20 / lookahead 1,
+  converts to gaps, and min–max scales — Shikong ships
+  un-normalised, un-windowed values); `emit_nstpp_npz` — one
+  `<name>_nstpp.npz` of 30-day / 7-day-step windows keyed `YYYYMMDD`
+  with `[t_days, lon, lat]` (the NSTPP earthquakes preprocessor's
+  layout); `emit_dstpp_pickles` — positional `[t, lng, lat]`
+  sequences under `dataset/<name>/`; `emit_smash_pickles` —
+  positional `[t, mark, lng, lat]` (dim=3, mark 0-based codebook
+  int); `emit_deepstpp_csv` — `{split}_deepstpp.csv`, columns
+  `[x, y, t]`, `%f` (the DeepSTPP synthetic `save()` shape). Splits
+  reuse the PR #55 chronological boundaries (dev→val, aux excluded
+  from the fixed-schema containers). 18 tests in
+  `tests/stpp/test_dl_formats.py` (synthetic frames only); design
+  note `docs/design-notes/stpp-dl-data-prep.md`; independent
+  verification `audit/stpp-dl-data-prep/verify_dl_emissions.py`
+  (61 checks, 0 failures, Chicago + GeoLife). Honest limits stated
+  in the design note: the DSTPP reference loader's
+  `assert Min[1] > 0` cannot load these emissions (first gap is
+  0.0 by construction, and Chicago has 23,683 same-minute tied
+  consecutive pairs) — DSTPP compatibility is format-level only;
+  no tie-breaking is invented. The inventory §7 items for the five
+  DL models are now verified by direct reads (DeepSTPP dormant
+  2023-09-21, AutoSTPP, NSTPP preprocessor, DSTPP/SMASH loaders);
+  what could not be read (NSTPP `datasets.py`, ready-`.npz` build
+  steps, SMASH mark semantics, time units) stays unverified, never
+  guessed. Also corrects the inventory: `event_type_num.json` does
+  not exist in the DSTPP repo and has no role in its format.
+
 ### Changed
 
 - **Renamed: EventFlow → Shikong (时空, shíkōng, "space-time").** The PyPI
