@@ -94,15 +94,28 @@ class RecencyWeightConfig(BaseModel):
 class CalendarEncodingConfig(BaseModel):
     """Configuration for calendar encoding step."""
 
-    encoding_type: Literal["cyclical", "onehot", "ordinal"] = Field(
+    encoding_type: Literal["cyclical", "ordinal"] = Field(
         default="cyclical", description="Type of calendar encoding"
     )
-    # Keep in sync with CALENDAR_ENCODING_COMPONENTS below: the Literal
-    # guards the registry path, the frozenset guards direct construction.
+    # Keep in sync with CALENDAR_ENCODING_TYPES and
+    # CALENDAR_ENCODING_COMPONENTS below: the Literals guard the
+    # registry path, the frozensets guard direct construction.
+    # "onehot" is deliberately absent from both: one-hot encoding is
+    # not supported by the library (deferred to model training time),
+    # so it must be rejected, not silently ignored (issue #41).
     components: list[Literal["hour", "day_of_week", "day_of_month", "month", "week_of_year"]] = (
         Field(default=["hour", "day_of_week", "month"], description="Components to encode")
     )
 
+
+# Encoding types CalendarEncodingStep actually implements. This is the
+# single source of truth shared by the Literal in
+# CalendarEncodingConfig above and the step's __init__ validation: the
+# registry path is already safe (pydantic rejects values outside the
+# Literal before the step is built), but direct construction bypasses
+# it, so the step must validate too (issue #41). "onehot" is
+# deliberately not a member: it is deferred to model training time.
+CALENDAR_ENCODING_TYPES = frozenset({"cyclical", "ordinal"})
 
 # Components CalendarEncodingStep actually encodes. This is the single
 # source of truth shared by the Literal in CalendarEncodingConfig above
@@ -560,7 +573,11 @@ class RecencyWeightStep(Step):
 
 
 class CalendarEncodingStep(Step):
-    """Encode calendar features with cyclical, one-hot, or ordinal encoding.
+    """Encode calendar features with cyclical or ordinal encoding.
+
+    One-hot encoding is deliberately not supported: it expands columns
+    significantly and is better done at model training time. An unknown
+    encoding type raises ValueError at construction (issue #41).
 
     Inputs:
         - timestamp_col from EventSchema
@@ -575,6 +592,24 @@ class CalendarEncodingStep(Step):
         components: Sequence[str] | None = None,
     ) -> None:
         self.encoding_type = encoding_type
+        # An unknown encoding type must fail here, not be silently
+        # ignored by run(): the branches below only implement the
+        # supported types, so "onehot" (or a typo) used to yield no
+        # columns at all (issue #41). Validated against the same set
+        # as the Literal in CalendarEncodingConfig.
+        if encoding_type not in CALENDAR_ENCODING_TYPES:
+            hint = (
+                " One-hot encoding is deliberately not supported;" " do it at model training time."
+                if encoding_type == "onehot"
+                else ""
+            )
+            raise ValueError(
+                f"Unknown calendar encoding type: {encoding_type!r}. "
+                "Supported calendar encoding types: "
+                + ", ".join(sorted(CALENDAR_ENCODING_TYPES))
+                + "."
+                + hint
+            )
         self.components = list(components) if components else ["hour", "day_of_week", "month"]
         # An unknown component must fail here, not be silently skipped by
         # run(): the branches below only produce the supported components,
