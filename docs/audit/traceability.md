@@ -143,3 +143,54 @@ le travail approfondit des objectifs déjà atteints ou partiels
 (lag spatial vectorisé, features espace-temps, garde-fous de validation)
 sans en clore de nouveaux. Les objectifs 21–24 restent volontairement
 non atteints : ils sont hors phase 2.
+
+## Après phase 3
+
+**Mesuré par `make audit`, 2026-11-16** (voir `audit/phase-3/manifest.json`) :
+verdict PASS (5/5 : ruff, black, mypy, pytest, replay), 916 tests passés,
+couverture 85 % (6 598 statements, 959 missed) ; replay Chicago T1 2024 :
+1 908 088 lignes × 90 colonnes, somme `count` = 60 235 — inchangé par
+rapport à la phase 2 (non-régression). Les deux nouvelles preuves sont
+hors audit Chicago : Beijing 420 768 lignes × 64 colonnes (12 stations ×
+35 064 heures), NA identiques avant/après complétion et après le pipeline
+complet (PM2.5 8 739 → 8 739) ; GeoLife sous-ensemble 1 471 lignes ×
+26 colonnes (2 utilisateurs, 1 trajectoire chacun), panel de comptage
+112 lignes, somme `count` = 1 471 ; connecteur générique démontré
+(0/1 471 appariements GeoLife × Beijing — les plages ne se recouvrent
+pas — et 8/9 sur le contrôle positif, vérifiés à la main).
+
+- **Objectif 1 — Atteint (renforcé, sans changement de statut).** La
+  généricité est désormais prouvée par l'exécution, pas seulement
+  déclarée : deuxième domaine (capteurs fixes, mesures avec NA) et
+  troisième représentation (trajectoires mobiles) rejoués avec les
+  mêmes Steps, sans hypothèse Chicago ; les deux recettes sont
+  enregistrées et validées par la CLI (`eventflow validate` : 6 et
+  10 étapes). Voir `docs/design-notes/phase3-beijing.md` et
+  `docs/design-notes/phase3-geolife-boundary.md`.
+- **Objectif 13 — Atteint (chiffres mis à jour).** Recette rejouée par
+  `make audit` : 1 908 088 lignes × 90 colonnes, somme `count` =
+  60 235 (voir `audit/phase-3/replay_chicago.json`).
+- **Objectif 15 — Partiel (précisé, statut inchangé).** Le chargement
+  de contexte est désormais générique et testé (`TabularFileSource` :
+  fichier local déclaré, validation bloquante, jointures temporelles /
+  spatiales existantes inchangées) — mais les sources Chicago restent
+  non câblées et non testées, et aucun fournisseur live (POI, météo,
+  taux) n'existe. Voir `docs/design-notes/phase3-connectors.md`.
+- **Objectif 25 — Atteint (maintenu).** Couverture 85 % après phase 3
+  (voir `audit/phase-3/manifest.json`).
+- **Objectif 26 — Partiel (précisé).** Tests d'intégration sur données
+  réelles pour deux nouveaux domaines (Beijing, GeoLife) avec
+  vérifications manuelles contre les CSV bruts ; Hypothesis toujours
+  inutilisé, aucun test de performance dédié.
+- **Objectif 27 — Partiel (inchangé).** Le partitionnement de sortie
+  (`output.partition_by`) n'est toujours pas implémenté (toujours une
+  erreur bloquante dans la CLI).
+- **Objectif 6 — Atteint (chiffres mis à jour).** 916 tests, 85 % de
+  couverture (mesurés par `make audit`).
+
+**Compteur après phase 3 : 15 atteints, 8 partiels, 4 non atteints,
+1 non vérifiable** — inchangé. Aucun mouvement de statut en phase 3 :
+le travail prouve la généricité (objectif 1, déjà atteint) et dote le
+contexte d'un chargeur générique testé (objectif 15, toujours partiel)
+sans clore de nouvel objectif. Les objectifs 21–24 restent volontairement
+non atteints : ils sont hors phase 3.

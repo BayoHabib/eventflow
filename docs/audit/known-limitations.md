@@ -61,11 +61,71 @@ rewriting the README.
   `EventFlow Team <team@eventflow.dev>`. Changing it is Habib's decision.
 - **No generated API docs**: no Sphinx/MkDocs, no ReadTheDocs site (the
   dead ReadTheDocs URL was removed from `pyproject.toml` in phase 0).
-- **`tests/datasets/` is empty** (only `__init__.py`).
+- **`tests/datasets/` now holds the phase-3 dataset tests**
+  (`test_beijing_air_quality.py`, `test_geolife.py`); it was empty
+  before phase 3.
 - **Adapter conversion limits**: `to_tensorflow()` exists only on Raster
   (and is a NumPy transpose); `to_torch()` is absent from Table.
 - **Custom exceptions**: none — everything raises `ValueError`,
   `ImportError` or `NotImplementedError` (audit objective 19).
+
+## Phase-3 scope reminders and new limitations (phase 3, 2026-11-16)
+
+- **Beijing's shipped panel is already complete.** The 12 per-station
+  CSVs hold all 35,064 hourly bins each (2013-03-01 → 2017-02-28);
+  there are no missing station-hours. All missingness is NA values
+  inside present rows. `CompletePanelStep` therefore generates 0 pairs
+  on the real data; generated pairs are exercised only on synthetic
+  gaps in tests. The proof covers gaps / missing-stays-missing and
+  per-station separation, NOT irregular sampling (regular hourly
+  timestamps).
+- **Station coordinates are second-hand.** The UCI files carry no
+  coordinates; the values come from Ma et al. (2023) Table 1 for 11
+  stations and Zhang et al. (2020) Table S1 for Shunyi. Independent
+  sources disagree by up to ~0.04° (~4 km) for some stations. No step
+  in the v1 recipe consumes coordinates, so the imprecision cannot
+  leak into any feature — but the values are not primary data.
+- **`CompletePanelStep` still zero-fills observed nulls in
+  `value_cols`.** The blanket `fill_null(0)` applies to the whole
+  value column, not only to generated pairs. `measure_cols` fixes the
+  measurement case (never zero-filled); a future `value_cols` column
+  with observed nulls would still be silently zeroed. Chicago is
+  unaffected (counts are never null on observed rows). Restricting the
+  fill to generated pairs only is a separable follow-up.
+- **`measure_cols` is not exposed in `FeatureConfig`.** The Beijing
+  recipe constructs `CompletePanelStep` directly; the YAML-declarable
+  config has no measurement-columns key. A recipe that wants
+  YAML-declared `measure_cols` needs a `FeatureConfig` extension.
+- **Rolling means skip nulls.** Polars `rolling_mean` with
+  `min_samples=1` averages the available hours; a 24 h mean over a
+  window with missing hours is the mean of the hours present.
+  Documented in the Beijing design note, not hidden.
+- **GeoLife timezone is an assumption.** `.plt` times are labelled
+  `Asia/Shanghai` with no conversion. If the logger used UTC, every
+  timestamp is off by 8 h.
+- **GeoLife grid origin is data-dependent.** Cell IDs come from the
+  minimum projected coordinate of the subset, so they are not stable
+  across subsets. Chicago pins the origin in config; GeoLife should
+  too once a canonical extent is chosen.
+- **GeoLife × Beijing do not overlap in time.** The GeoLife subset
+  spans 2007–2009, the Beijing data start 2013-03-01 (gap 1,392.5
+  days). The connector demo proves the tolerance correctly rejects
+  all 1,471 points (0 matched) instead of forcing a match. A
+  production GeoLife enrichment still needs an overlapping 2007–2009
+  weather source (reanalysis or an API written to a local file);
+  none is on disk and none was fabricated.
+- **`TabularFileSource` is local files only.** No live APIs, no
+  network fetching, no POI/rates providers — by design. The two seams
+  for a future provider are documented in
+  `docs/design-notes/phase3-connectors.md`.
+- **`TemporalContextJoinStep` with `strategy="exact"` does not sort
+  its output.** Values are correct; row order is the Polars left-join
+  (hash) order. The step makes no order guarantee; changing shared
+  join behaviour was out of scope for phase 3.
+- **Audit manifest label is stale.** `scripts/audit.py` still writes
+  `"audit": "eventflow phase-1 audit"` in `manifest.json`, including
+  in the phase-3 pack. Cosmetic only; the measured numbers in the
+  manifest are the phase-3 run's.
 
 ## Phase-2 scope reminders and new limitations (phase 2, 2026-11-15)
 

@@ -13,6 +13,7 @@ from eventflow.core.context.sources import (
     StaticSpatialSource,
     StaticTemporalSource,
 )
+from eventflow.core.context.tabular import TabularFileSource
 
 __all__ = [
     "BaseContextSource",
@@ -20,6 +21,7 @@ __all__ = [
     "StaticTemporalSource",
     "DynamicTemporalSource",
     "SpatioTemporalSource",
+    "TabularFileSource",
     "TemporalJoin",
     "SpatialJoin",
     "SpatioTemporalJoin",
