@@ -107,14 +107,44 @@ traceability. PRs are in English.
   columns with correct values (busiest cell hand-verified against the raw
   CSV). Skipped checks remain SKIP/INCOMPLETE.
 
-### Phase 2 — Space-time v2
+### Phase 2 — Space-time v2 ✅ DONE (2026-11-15)
 
-- [ ] Spatial lag multi-scale
-- [ ] KDE / STKDE
-- [ ] Near-repeat
-- [ ] Simplified Hawkes
-- [ ] Extend the Phase 1 completion contract to additional spatial supports
-  where needed; preserve the same observation-quality semantics
+Delivered (PR #42): 5 new generic Steps in Polars, causal, on the
+explicit-zero completed panel — `MultiScaleSpatialLagStep` (queen rings
+1/2/3, built on the vectorized approach from issue #38),
+`KernelDensityStep`, `SpaceTimeKernelDensityStep`, `NearRepeatStep`,
+`HawkesExcitationStep` (fixed exponential kernel, no fitting). The
+Chicago recipe now runs 21 steps (was 17) with 12 new columns; 835
+tests passed + 3 skipped / 0 failed (838 collected), coverage 85%
+(CI run 94, 10/10; local audit run 838 passed), `make audit` PASS 5/5;
+Chicago Q1 2024 replay 1,908,088 rows × 90 columns, sum `count` =
+60,235, 1,851,597 explicit-zero rows; 14/14 hand-checks vs the raw
+CSV; traceability unchanged (15 attained / 8 partial / 4 not attained
+/ 1 unverifiable). Two bugs caught by the hand-check and fixed in the
+PR: NearRepeat/STKDE wired to the wrong time column (`time_bin`, null
+on generated rows) and OOM on the giant joins (eager steps + chunked
+KDE join).
+
+- [x] Spatial lag multi-scale (queen rings 1/2/3, disjoint;
+  `SpatialLagStep` vectorized the same way, equivalence to the Phase 1
+  implementation proven to 1e-9, ring-1 value 0.375 preserved)
+- [x] KDE / STKDE (Gaussian KDE in events/m², separable Gaussian ×
+  exponential-decay product kernel; fixed explicit bandwidths, no
+  auto-estimation, no edge correction)
+- [x] Near-repeat (queen rings 1–3, trailing 7 d and 7–14 d windows,
+  closed-left, plus `nr_event_7d` flag)
+- [x] Simplified Hawkes (fixed exponential kernel with a half-life
+  parameter; no fitting, no background separation, no branching ratio)
+- [x] Extend the Phase 1 completion contract to additional spatial
+  supports (partially delivered): neighbour tables built once from the
+  completed panel's unit set; zone/areal supports remain out of scope
+- [ ] **Exit criterion 5 (timings) NOT met as written:** single-scale
+  `SpatialLagStep` 6.19 s (was 51.4 s, ×8.3) vs the ≤ ~2 s target;
+  total pipeline ~98 s vs ~61 s in Phase 1 (≤ ~20 s target). The
+  vectorization itself is proven; the remaining cost is the group_by
+  over edge×bin intermediates, and the four new families add their own
+  joins. Issue #38 is addressed by this PR but not closed — maintainer
+  decides. Issues #39 and #41 untouched.
 
 ### Phase 3 — Broader genericity proof
 
