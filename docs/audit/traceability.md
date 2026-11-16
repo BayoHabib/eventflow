@@ -194,3 +194,51 @@ le travail prouve la généricité (objectif 1, déjà atteint) et dote le
 contexte d'un chargeur générique testé (objectif 15, toujours partiel)
 sans clore de nouvel objectif. Les objectifs 21–24 restent volontairement
 non atteints : ils sont hors phase 3.
+
+## Après phase 4
+
+**Mesuré par `make audit`, 2026-11-16** (voir `audit/phase-4/manifest.json`) :
+verdict PASS (5/5 : ruff, black, mypy, pytest, replay), 991 tests passés,
+couverture 86 % (6 953 statements, 983 missed) ; replay Chicago T1 2024
+inchangé : 1 908 088 lignes × 90 colonnes, somme `count` = 60 235.
+Replays Beijing et GeoLife rejoués et identiques aux valeurs phase 3
+(Beijing 420 768 lignes × 64 colonnes, NA PM2.5 8 739 → 8 739 ;
+GeoLife sous-ensemble 1 471 lignes, panel count 112 lignes, somme 1 471 ;
+voir `audit/phase-4/phase4_evaluation.json`).
+
+- **Objectif 6 — Atteint (chiffres mis à jour).** 991 tests, 86 % de
+  couverture (mesurés par `make audit`).
+- **Objectif 13 — Atteint (inchangé).** Recette Chicago rejouée par
+  `make audit` : 1 908 088 lignes × 90 colonnes, somme `count` =
+  60 235 (voir `audit/phase-4/replay_chicago.json`).
+- **Objectif 17 — Partiel (précisé, statut inchangé).** L'inventaire
+  des statistiques ajustées est désormais explicite : le top-N de
+  `CategoryCountsStep` est la seule statistique ajustée parmi les Steps
+  (test d'inventaire) ; `encode_categorical`, `aggregate_by_category`
+  et `normalize_features` restent EXPERIMENTAL, ajustés dans l'appel
+  mais sans état inter-appels, utilisés par aucune recette — avertissement
+  explicite ajouté (`docs/design-notes/phase4-fitted-statistics.md`).
+  Le target encoding n'existe pas dans la bibliothèque (retiré en phase 0)
+  : l'item est documenté non applicable, aucun encodeur inventé.
+- **Objectif 25 — Atteint (maintenu).** Couverture 86 % après phase 4
+  (voir `audit/phase-4/manifest.json`).
+- **Objectif 26 — Partiel (précisé, statut inchangé).** Évaluation
+  anti-fuite désormais outillée et testée : splits bloqués
+  (temporel / spatial / entité) avec rejet des splits qui fuient,
+  walk-forward à fenêtre croissante avec refit par fold, vérité terrain
+  synthétique avec paramètres plantés récupérés (lag-1 0,529 pour 0,6
+  planté, hotspot exact, ratio week-end 1,535 pour 1,6 planté) et fuite
+  plantée exposée (PR-AUC 1,00 en split aléatoire contre 0,41 en split
+  bloqué causal) ; exemples aval PAI / PR-AUC sur Chicago
+  (PAI cellule 7,96 à 1 %, PR-AUC 0,0684 pour `count_ma_7`). Hypothesis
+  toujours inutilisé, aucun test de performance dédié.
+- **Objectif 27 — Partiel (inchangé).** Le partitionnement de sortie
+  (`output.partition_by`) n'est toujours pas implémenté (toujours une
+  erreur bloquante dans la CLI).
+
+**Compteur après phase 4 : 15 atteints, 8 partiels, 4 non atteints,
+1 non vérifiable** — inchangé. Aucun mouvement de statut en phase 4 :
+le travail outille l'évaluation anti-fuite (objectifs 17 et 26,
+toujours partiels, précisés) et fige le cadrage des statistiques
+ajustées sans clore de nouvel objectif. Les objectifs 21–24 restent
+volontairement non atteints : ils sont hors phase 4.

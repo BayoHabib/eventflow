@@ -111,6 +111,17 @@ class CategoryCountsStep(Step):
     Top-N selection uses total frequency over the whole frame; ties are
     broken by sorted value so the selection is deterministic. Null values
     are excluded from the ranking and counted in ``other``.
+
+    Fit/freeze (Phase 4): :meth:`fit` learns the top-N vocabulary from one
+    frame only and freezes it; :meth:`run` after :meth:`fit` uses the
+    frozen vocabulary and never re-learns from the run frame, so a
+    category that is frequent in a later slice but absent (or rare) in
+    the fit frame lands in ``other``. This is the anti-leakage contract
+    for train/test evaluation: fit on the train fold, run on the test
+    fold. Calling :meth:`fit` again replaces the frozen vocabulary
+    cleanly, so a harness can refit the same step instance per fold.
+    Without :meth:`fit`, :meth:`run` keeps the original behaviour of
+    learning the top-N from the run frame (single-run recipes).
     """
 
     def __init__(
@@ -139,12 +150,51 @@ class CategoryCountsStep(Step):
         self.unit_col = unit_col
         self.time_col = time_col
         self.top_n = top_n
+        # Frozen top-N vocabulary per category column, set by fit().
+        # None means "unfitted": run() learns the vocabulary from the run
+        # frame, as before Phase 4.
+        self._fitted: dict[str, list[tuple[Any, str]]] | None = None
 
-    def run(self, event_frame: EventFrame) -> EventFrame:
-        """Execute per-category count computation."""
+    def fit(self, event_frame: EventFrame) -> CategoryCountsStep:
+        """Learn the top-N vocabulary from ``event_frame`` only and freeze it.
+
+        Reuses :meth:`_select_top_values`, including its
+        collision/validation errors. A frame missing a category column
+        raises the same ``ValueError`` as :meth:`run`. Calling ``fit``
+        again replaces the frozen vocabulary cleanly.
+        """
         lf = event_frame.lazy_frame
-        columns = lf.collect_schema().names()
+        self._require_columns(lf.collect_schema().names())
+        fitted = {cat_col: self._select_top_values(lf, cat_col) for cat_col in self.category_cols}
+        self._fitted = fitted
+        logger.info(
+            "Fitted CategoryCountsStep vocabulary (top_n=%d): %s",
+            self.top_n,
+            {cat_col: [value for value, _ in pairs] for cat_col, pairs in fitted.items()},
+        )
+        return self
 
+    @property
+    def is_fitted(self) -> bool:
+        """Whether fitted statistics (a frozen top-N vocabulary) are held."""
+        return self._fitted is not None
+
+    def fitted_values(self, cat_col: str) -> list[tuple[Any, str]]:
+        """Return the frozen (value, sanitized) pairs for ``cat_col``.
+
+        Raises ``ValueError`` when the step is not fitted and ``KeyError``
+        when ``cat_col`` is not one of the configured category columns.
+        The returned list is a copy: mutating it cannot change the frozen
+        vocabulary.
+        """
+        if self._fitted is None:
+            raise ValueError("CategoryCountsStep is not fitted; call fit(event_frame) first.")
+        if cat_col not in self._fitted:
+            raise KeyError(f"CategoryCountsStep has no fitted vocabulary for column {cat_col!r}.")
+        return list(self._fitted[cat_col])
+
+    def _require_columns(self, columns: Sequence[str]) -> None:
+        """Raise the missing-column error shared by fit() and run()."""
         missing = [
             c for c in [self.unit_col, self.time_col, *self.category_cols] if c not in columns
         ]
@@ -152,6 +202,13 @@ class CategoryCountsStep(Step):
             raise ValueError(
                 "CategoryCountsStep: missing column(s) in the frame: " + ", ".join(missing) + "."
             )
+
+    def run(self, event_frame: EventFrame) -> EventFrame:
+        """Execute per-category count computation."""
+        lf = event_frame.lazy_frame
+        columns = lf.collect_schema().names()
+
+        self._require_columns(columns)
         self._reject_null_keys(lf)
 
         # Select the top-N values per column first: sanitization collisions
@@ -159,12 +216,18 @@ class CategoryCountsStep(Step):
         # produced column name must be known before building the aggregation
         # so a collision with the frame (or among produced names) is an
         # error instead of a silent overwrite.
-        kept: dict[str, list[tuple[Any, str]]] = {}
+        if self._fitted is not None:
+            # Frozen vocabulary: never re-learn from the run frame.
+            kept: dict[str, list[tuple[Any, str]]] = {
+                cat_col: list(pairs) for cat_col, pairs in self._fitted.items()
+            }
+        else:
+            # Unfitted: the pre-Phase-4 behaviour — learn top-N from the
+            # run frame.
+            kept = {cat_col: self._select_top_values(lf, cat_col) for cat_col in self.category_cols}
         produced: list[str] = []
         for cat_col in self.category_cols:
-            top_values = self._select_top_values(lf, cat_col)
-            kept[cat_col] = top_values
-            for _, sanitized in top_values:
+            for _, sanitized in kept[cat_col]:
                 produced.append(f"count_{cat_col}_{sanitized}")
                 produced.append(f"share_{cat_col}_{sanitized}")
             produced.append(f"count_{cat_col}_other")

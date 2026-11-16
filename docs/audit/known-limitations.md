@@ -191,6 +191,39 @@ rewriting the README.
   `tests/core/test_near_repeat_steps.py`,
   `tests/integration/test_chicago_pipeline.py`).
 
+## Phase-4 scope reminders and new limitations (phase 4, 2026-11-16)
+
+- **The harness rejects leaking splits, not leaking columns.** A column
+  computed from future information scores 1.0 even on temporally blocked
+  test rows (`tests/evaluation/test_planted_leak_integration.py::
+  test_blocked_split_does_not_sanitize_a_future_peeking_column`).
+  Blocking forces time order and exposes the leak (random-split PR-AUC
+  1.00 vs blocked causal 0.41), but the column itself must not be built.
+  The harness cannot inspect column provenance.
+- **No spatial buffer zone around held-out units.** Blocked spatial
+  splits are disjoint unit sets with no guard band; neighbouring units
+  can still leak through spatial-lag / KDE features across the boundary.
+  Documented in `docs/design-notes/phase4-evaluation.md`, not implemented.
+- **Walk-forward is expanding-window only.** No sliding-window mode;
+  every fold refits from scratch (no warm-start / incremental refit).
+- **Downstream metrics are examples, not acceptance criteria.** PAI and
+  PR-AUC on the Chicago replay (PAI cellule 7,96 à 1 %, PR-AUC 0,0684
+  pour `count_ma_7`) are worked examples with lag features as scores
+  and no model trained; no threshold on them accepts or rejects the
+  preprocessing (`scripts/phase4_chicago_evaluation.py`).
+- **Synthetic recovery tolerances are generator-specific.** The planted
+  parameters (lag-1 φ=0,6, hotspot ×3, week-end ×1,6) are recovered
+  within the tolerances stated in the tests on 6×6 units × 56 daily
+  bins, seeds 42 and 7; they are not a claim about recovery on real
+  data at other scales.
+- **Audit manifest label still stale.** `scripts/audit.py` labels its
+  manifest "eventflow phase-1 audit" although the numbers are the
+  phase-4 run's (same staleness noted in phase 3).
+- **`encode_categorical` still learns its vocabulary over the whole
+  frame.** It is EXPERIMENTAL, used by no recipe or Step, and was
+  deliberately left as-is; it must not be used across train/test
+  (see `docs/design-notes/phase4-fitted-statistics.md`).
+
 ## Phase-0 scope reminders
 
 - Phase 0 implemented **no new features**: no lags, no rolling windows,

@@ -506,3 +506,230 @@ class TestCategoryCountsMultipleColumns:
         assert z1["count_primary_type_other"] == 0
         z2 = df.filter(pl.col("zone") == "z2").row(0, named=True)
         assert z2["count_primary_type_B"] == 1
+
+
+class TestCategoryCountsFitFreeze:
+    """fit/freeze semantics (Phase 4, criterion 5).
+
+    ``fit(train)`` learns the top-N vocabulary from the train slice only;
+    ``run()`` afterwards uses the frozen vocabulary and never re-learns
+    from the run frame.
+    """
+
+    @pytest.fixture
+    def train_frame(self) -> EventFrame:
+        """One unit/bin: A x6, B x3, C x1 -> top-2 vocabulary {A, B}."""
+        return _make_frame(
+            ["g1"] * 10,
+            [BIN_1] * 10,
+            {"primary_type": ["A"] * 6 + ["B"] * 3 + ["C"]},
+        )
+
+    @pytest.fixture
+    def test_frame(self) -> EventFrame:
+        """Same unit/bin: C x8 (would be top-1 globally), A x1, D x1.
+
+        C is frequent here but rare in train; D is entirely new.
+        """
+        return _make_frame(
+            ["g1"] * 10,
+            [BIN_1] * 10,
+            {"primary_type": ["C"] * 8 + ["A", "D"]},
+        )
+
+    def test_is_fitted_flag(self, train_frame: EventFrame) -> None:
+        """is_fitted is False before fit and True after."""
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        assert step.is_fitted is False
+        step.fit(train_frame)
+        assert step.is_fitted is True
+
+    def test_fit_returns_self(self, train_frame: EventFrame) -> None:
+        """fit() returns the step itself, for harness chaining."""
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        assert step.fit(train_frame) is step
+
+    def test_fitted_values(self, train_frame: EventFrame) -> None:
+        """fitted_values() returns the frozen (value, sanitized) pairs."""
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+    def test_fitted_values_requires_fit(self, train_frame: EventFrame) -> None:
+        """fitted_values() on an unfitted step raises; unknown column too."""
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        with pytest.raises(ValueError, match="not fitted"):
+            step.fitted_values("primary_type")
+        step.fit(train_frame)
+        with pytest.raises(KeyError, match="no_such_column"):
+            step.fitted_values("no_such_column")
+
+    def test_fitted_values_returns_a_copy(self, train_frame: EventFrame) -> None:
+        """Mutating the returned list cannot change the frozen vocabulary."""
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+        values = step.fitted_values("primary_type")
+        values.append(("C", "C"))
+        values.clear()
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+    def test_unseen_test_categories_land_in_other(
+        self, train_frame: EventFrame, test_frame: EventFrame
+    ) -> None:
+        """A category frequent in test but rare in train goes to ``other``.
+
+        C would have been top-N had the vocabulary been learned from the
+        test slice (or from train+test); frozen on train it is ``other``,
+        and no column for C or D is produced.
+        """
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+        df = step.run(test_frame).collect()
+
+        assert "count_primary_type_A" in df.columns
+        assert "count_primary_type_B" in df.columns
+        assert "count_primary_type_C" not in df.columns
+        assert "count_primary_type_D" not in df.columns
+        row = df.row(0, named=True)
+        assert row["count_primary_type_A"] == 1
+        assert row["count_primary_type_B"] == 0
+        assert row["count_primary_type_other"] == 9  # C x8 + D x1
+        assert row["share_primary_type_other"] == pytest.approx(0.9)
+        assert row["primary_type_entropy"] == pytest.approx(_expected_entropy([1, 0, 9]))
+
+    def test_held_out_slice_cannot_change_vocabulary(
+        self, train_frame: EventFrame, test_frame: EventFrame
+    ) -> None:
+        """Mutating the held-out slice leaves the produced columns identical.
+
+        Twenty new rows of a frequent unseen category ZZZ are appended
+        to the test slice between two runs: no ZZZ column appears and
+        the full produced column set is unchanged.
+        """
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+
+        first = step.run(test_frame).collect()
+        mutated = _make_frame(
+            ["g1"] * 30,
+            [BIN_1] * 30,
+            {"primary_type": ["C"] * 8 + ["A", "D"] + ["ZZZ"] * 20},
+        )
+        second = step.run(mutated).collect()
+
+        assert "count_primary_type_ZZZ" not in second.columns
+        assert sorted(second.columns) == sorted(first.columns)
+        # The frozen vocabulary itself is untouched by either run.
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+    def test_refit_replaces_vocabulary(
+        self, train_frame: EventFrame, test_frame: EventFrame
+    ) -> None:
+        """Fitting again replaces the frozen vocabulary cleanly.
+
+        A harness refits the same step instance per fold; no trace of
+        the previous vocabulary may survive.
+        """
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+        step.fit(test_frame)
+        assert step.is_fitted is True
+        assert step.fitted_values("primary_type") == [("C", "C"), ("A", "A")]
+        df = step.run(test_frame).collect()
+        assert "count_primary_type_C" in df.columns
+        assert "count_primary_type_B" not in df.columns  # B was in the old vocabulary
+        row = df.row(0, named=True)
+        assert row["count_primary_type_C"] == 8
+        assert row["count_primary_type_other"] == 1  # D only
+
+    def test_failed_refit_keeps_previous_vocabulary(self, train_frame: EventFrame) -> None:
+        """A fit that raises leaves the previously frozen vocabulary intact.
+
+        The new vocabulary is assigned only after every column validates.
+        """
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        step.fit(train_frame)
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+        bad = _make_frame(["g1"] * 2, [BIN_1] * 2, {"primary_type": ["A B", "A-B"]})
+        with pytest.raises(ValueError, match="both sanitize"):
+            step.fit(bad)
+        assert step.is_fitted is True
+        assert step.fitted_values("primary_type") == [("A", "A"), ("B", "B")]
+
+    def test_fit_missing_category_column_raises(self, reference_frame: EventFrame) -> None:
+        """fit() on a frame missing a category column raises like run()."""
+        step = CategoryCountsStep(category_cols=["no_such_column"], top_n=2)
+        with pytest.raises(ValueError, match="missing column"):
+            step.fit(reference_frame)
+
+    def test_fit_reuses_top_n_validation_errors(self) -> None:
+        """fit() reuses _select_top_values, including its collision errors."""
+        frame = _make_frame(["g1"] * 2, [BIN_1] * 2, {"primary_type": ["A B", "A-B"]})
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=10)
+        with pytest.raises(ValueError, match="both sanitize"):
+            step.fit(frame)
+        assert step.is_fitted is False  # a failed fit leaves nothing frozen
+
+    def test_fit_with_multiple_category_columns(self) -> None:
+        """Each category column gets its own frozen vocabulary."""
+        frame = _make_frame(
+            ["g1"] * 4,
+            [BIN_1] * 4,
+            {
+                "primary_type": ["THEFT", "THEFT", "BATTERY", "ASSAULT"],
+                "location_description": ["STREET", "ALLEY", "STREET", "STREET"],
+            },
+        )
+        step = CategoryCountsStep(category_cols=["primary_type", "location_description"], top_n=2)
+        step.fit(frame)
+        assert step.fitted_values("primary_type") == [("THEFT", "THEFT"), ("ASSAULT", "ASSAULT")]
+        assert step.fitted_values("location_description") == [
+            ("STREET", "STREET"),
+            ("ALLEY", "ALLEY"),
+        ]
+        df = step.run(frame).collect()
+        assert "count_primary_type_BATTERY" not in df.columns  # 3rd, folded into other
+        assert df.row(0, named=True)["count_primary_type_other"] == 1
+
+    def test_unfitted_run_matches_fit_on_same_frame(self, reference_frame: EventFrame) -> None:
+        """Unfitted run() is the old code path: same output as fit-then-run.
+
+        The unfitted branch of run() learns the top-N from the run frame
+        exactly as before Phase 4, so fitting on the same frame and then
+        running must produce an identical frame.
+        """
+        unfitted = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        fitted = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        fitted.fit(reference_frame)
+
+        assert unfitted.run(reference_frame).collect().equals(fitted.run(reference_frame).collect())
+
+    def test_unfitted_run_produces_pre_phase4_column_set(self, reference_frame: EventFrame) -> None:
+        """The unfitted column set is pinned to the pre-Phase-4 output.
+
+        The full Chicago replay (1,908,088 rows) is not re-run in a unit
+        test; the recipe-level check in tests/core/test_fitted_statistics.py
+        pins the Chicago step itself, and this test pins the exact
+        unfitted column set on the reference frame.
+        """
+        step = CategoryCountsStep(category_cols=["primary_type"], top_n=2)
+        assert step.is_fitted is False
+        df = step.run(reference_frame).collect()
+        produced = sorted(
+            c
+            for c in df.columns
+            if c.startswith(("count_primary_type_", "share_primary_type_"))
+            or c == "primary_type_entropy"
+        )
+        assert produced == [
+            "count_primary_type_A",
+            "count_primary_type_B",
+            "count_primary_type_other",
+            "primary_type_entropy",
+            "share_primary_type_A",
+            "share_primary_type_B",
+            "share_primary_type_other",
+        ]
