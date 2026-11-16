@@ -163,6 +163,10 @@ def extract_exact_events(
 
     # Codebook: sorted unique mark labels (deterministic). Labels are
     # the string form of the raw mark values, sorted lexicographically.
+    # Explicit annotation: np.zeros infers ndarray[tuple[int], ...]
+    # while np.array infers ndarray[tuple[int, ...], ...]; without it
+    # mypy rejects the second assignment (numpy 2.2 stubs, Python 3.10).
+    mark_values: np.ndarray[tuple[int, ...], np.dtype[np.int64]]
     if mark_col is None:
         labels = [SINGLE_MARK_LABEL]
         mark_values = np.zeros(df.height, dtype=np.int64)
