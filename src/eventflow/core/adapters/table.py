@@ -31,7 +31,8 @@ class TableOutput:
     """Output from TableAdapter conversion.
 
     Attributes:
-        data: The converted DataFrame (Polars)
+        data: The converted DataFrame (Polars) — also the uniform ``.data``
+            main-payload accessor shared by all adapter outputs.
         feature_names: List of feature column names
         target: Target column name (if specified)
         offset: Offset column name (if specified)

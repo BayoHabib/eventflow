@@ -191,6 +191,47 @@ rewriting the README.
   `tests/core/test_near_repeat_steps.py`,
   `tests/integration/test_chicago_pipeline.py`).
 
+## Phase-5 scope reminders and new limitations (phase 5, 2026-11-16)
+
+- **Not published on PyPI.** The package builds and passes `twine check`
+  (`audit/phase-5/build.log`, `twine_check.log`), CHANGELOG.md and the
+  release procedure exist (`docs/release.md`), but no upload has been
+  performed and no author contact email exists yet (the placeholder
+  `team@eventflow.dev` was removed from `pyproject.toml` rather than
+  shipped as a fake address). Publishing is the maintainer's gesture.
+- **Dockerfile not built.** `examples/Dockerfile` (examples only, no
+  service) exists and is documented, but there is no Docker in this VM;
+  the equivalent steps (wheel install in a fresh venv, `--help`,
+  `validate`, quick start, CLI run) were verified instead
+  (`examples/README.md`). Build the image on a Docker machine before
+  relying on it.
+- **Demo notebook still unverified.** Execution was attempted in phase 5
+  and fails (`ValueError: cannot concat empty list` — it reads monthly
+  CSVs from a path that does not exist here); it is marked UNVERIFIED in
+  its first cell and in `notebooks/README.md`. Its figures (ρ = 0.515,
+  104 anomalies) are presented nowhere as facts.
+- **`return_masks` / `return_inter_times` flags are not consulted.**
+  `SequenceAdapter.convert()` and `StreamAdapter.convert()` always
+  return masks / inter-event times regardless of the flags (the output
+  fields are required, so "no masks" has no clean representation).
+  Found during the phase-5 naming work; fixing it would change
+  behaviour, so it is documented, not fixed
+  (`docs/design-notes/phase5-adapter-naming.md`).
+- **`CompletePanelStep` emits explicit-zero rows with a null `time_bin`.**
+  Only observed (cell, bin) pairs carry a timestamp; generated pairs
+  carry the bin in the schema timestamp column (`date` for Chicago)
+  but a null `time_bin`. Observed during the phase-5 clean-install
+  verification (nulls appear right after step 6, `CompletePanelStep`);
+  the audit replay only checks null `count`, not null `time_bin`. The
+  Phase 2 fix (NearRepeat/STKDE wired to the schema timestamp column)
+  already accounts for this; a library-level fix is a separate task.
+- **Audit manifest label still stale.** `scripts/audit.py` labels its
+  manifest "eventflow phase-1 audit" although the numbers are the
+  phase-5 run's (same staleness noted in phases 3 and 4).
+- **No Sphinx/MkDocs site, no ReadTheDocs.** Docs are Markdown in
+  `docs/`; every code example is executed by a test, but there is no
+  built documentation site.
+
 ## Phase-4 scope reminders and new limitations (phase 4, 2026-11-16)
 
 - **The harness rejects leaking splits, not leaking columns.** A column

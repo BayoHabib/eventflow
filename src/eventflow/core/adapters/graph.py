@@ -58,6 +58,9 @@ class GraphOutput:
         edge_feature_names: Names of edge features
         snapshots: List of temporal snapshots (for dynamic graphs)
         dtypes: Data type information
+
+    Aliases (Phase 5, read-only property returning the same array object):
+        data: Alias for ``node_features`` — the main payload, uniform across adapters.
     """
 
     node_features: np.ndarray
@@ -74,6 +77,14 @@ class GraphOutput:
     def n_nodes(self) -> int:
         """Number of nodes."""
         return int(self.node_features.shape[0])
+
+    @property
+    def data(self) -> np.ndarray:
+        """Alias for :attr:`node_features` — the main payload of this output.
+
+        Uniform ``.data`` accessor shared by all adapter outputs; read-only.
+        """
+        return self.node_features
 
     @property
     def n_edges(self) -> int:

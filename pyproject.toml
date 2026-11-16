@@ -8,9 +8,12 @@ version = "0.1.0"
 description = "A high-performance, generic spatio-temporal event transformation engine"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
+# Author email deliberately omitted: team@eventflow.dev is not a real
+# contact address. The maintainer should add a real contact email here
+# before the first PyPI upload (see docs/release.md).
 authors = [
-    {name = "EventFlow Team", email = "team@eventflow.dev"}
+    {name = "EventFlow Team"}
 ]
 keywords = ["spatio-temporal", "events", "mlops", "feature-engineering"]
 classifiers = [

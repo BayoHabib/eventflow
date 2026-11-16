@@ -132,22 +132,44 @@ def test_readme_pipeline_steps_imports() -> None:
     """Every Step class named in the README Pipeline section must exist."""
     from eventflow.core.steps import (  # noqa: F401
         AssignToGridStep,
+        AssignToZonesStep,
+        BurstinessStep,
         CalendarEncodingStep,
+        CategoryCountsStep,
+        CompletePanelStep,
+        ComputeDistancesStep,
         ConditionalIntensityStep,
         ContinuousInterEventStep,
+        EWMAMeanStep,
         ExtractTemporalComponentsStep,
+        FillNullStep,
+        GetisOrdStep,
         GridAggregationStep,
         HawkesKernelStep,
+        InterArrivalStep,
         KDEStep,
+        LocalMoranStep,
         MovingAverageStep,
+        ObservationPanelStep,
+        RecencyWeightStep,
         SpatialLagStep,
         StreamingHawkesStep,
         StreamingInterEventStep,
         StreamingWindowStep,
         TemporalLagStep,
         TimeBinsStep,
+        TimeSinceLastEventStep,
         TransformCRSStep,
+        TrendStep,
+        ZeroFeaturesStep,
     )
+    from eventflow.core.steps.density import (  # noqa: F401
+        KernelDensityStep,
+        SpaceTimeKernelDensityStep,
+    )
+    from eventflow.core.steps.hawkes import HawkesExcitationStep  # noqa: F401
+    from eventflow.core.steps.near_repeat import NearRepeatStep  # noqa: F401
+    from eventflow.core.steps.spatial import MultiScaleSpatialLagStep  # noqa: F401
     from eventflow.core.steps.validation import (  # noqa: F401
         validate_point_process_features,
         validate_temporal_ordering,
@@ -189,3 +211,17 @@ def test_readme_has_no_stale_test_counts() -> None:
     assert "290 tests" not in text
     assert "68%" not in text
     assert "68% coverage" not in text
+    # Phase-0 figures, superseded by the phase-4 audit (991 tests, 86%).
+    assert "564 tests" not in text
+    assert "82% coverage" not in text
+    assert "coverage-82%" not in text
+
+
+def test_readme_does_not_claim_phase1_features_missing() -> None:
+    """Phases 1-2 delivered the features the old README said were missing."""
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    section = text.split("## What EventFlow does not do")[1].split("## Installation")[0]
+    assert "No per-category or rolling-window features yet" not in section
+    assert "No zero-count pairs in the Chicago output" not in section
+    assert "zero-count pairs require a separate completion step" not in text
+    assert "complete_panel: true" in text or "CompletePanelStep" in text

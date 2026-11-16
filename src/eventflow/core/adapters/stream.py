@@ -40,6 +40,11 @@ class StreamOutput:
         state_names: Names of state dimensions
         event_type_names: Names of event types
         dtypes: Data type information
+
+    Aliases (Phase 5, read-only properties returning the same array object):
+        inter_event_times: Alias for ``inter_times`` (full name).
+        state_features: Alias for ``states`` (consistent ``_features`` suffix).
+        data: Alias for ``states`` — the main payload, uniform across adapters.
     """
 
     timestamps: np.ndarray
@@ -57,6 +62,30 @@ class StreamOutput:
     def n_events(self) -> int:
         """Number of events."""
         return len(self.timestamps)
+
+    @property
+    def inter_event_times(self) -> np.ndarray:
+        """Alias for :attr:`inter_times` (full name).
+
+        Returns the identical array object as ``inter_times``; read-only.
+        """
+        return self.inter_times
+
+    @property
+    def state_features(self) -> np.ndarray:
+        """Alias for :attr:`states` (consistent ``_features`` suffix).
+
+        Returns the identical array object as ``states``; read-only.
+        """
+        return self.states
+
+    @property
+    def data(self) -> np.ndarray:
+        """Alias for :attr:`states` — the main payload of this output.
+
+        Uniform ``.data`` accessor shared by all adapter outputs; read-only.
+        """
+        return self.states
 
     @property
     def n_state_dims(self) -> int:
@@ -79,6 +108,9 @@ class StreamOutput:
                 "timestamps": torch.from_numpy(self.timestamps),
                 "states": torch.from_numpy(self.states),
                 "inter_times": torch.from_numpy(self.inter_times),
+                # Alias keys kept alongside the originals (Phase 5 naming).
+                "state_features": torch.from_numpy(self.state_features),
+                "inter_event_times": torch.from_numpy(self.inter_event_times),
             }
             if self.event_types is not None:
                 result["event_types"] = torch.from_numpy(self.event_types).long()
@@ -287,7 +319,11 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
             time_scale_params=time_scale_params,
             state_names=state_cols,
             event_type_names=event_type_names,
-            dtypes={"timestamps": str(np_dtype), "states": str(np_dtype)},
+            dtypes={
+                "timestamps": str(np_dtype),
+                "states": str(np_dtype),
+                "state_features": str(np_dtype),  # Alias key (Phase 5 naming).
+            },
         )
 
     def get_metadata(self, output: StreamOutput) -> AdapterMetadata:
@@ -296,6 +332,9 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
             "timestamps": output.timestamps.shape,
             "states": output.states.shape,
             "inter_times": output.inter_times.shape,
+            # Alias keys kept alongside the originals (Phase 5 naming).
+            "state_features": output.state_features.shape,
+            "inter_event_times": output.inter_event_times.shape,
         }
         if output.event_types is not None:
             shapes["event_types"] = output.event_types.shape
@@ -336,6 +375,9 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
                 "timestamps": output.timestamps,
                 "states": output.states,
                 "inter_times": output.inter_times,
+                # Alias keys stored alongside the originals (Phase 5 naming).
+                "state_features": output.state_features,
+                "inter_event_times": output.inter_event_times,
                 "origin": np.array(output.origin),
                 "state_names": np.array(output.state_names),
             }
@@ -385,6 +427,9 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
                 "timestamps": output.timestamps.tolist(),
                 "states": output.states.tolist(),
                 "inter_times": output.inter_times.tolist(),
+                # Alias keys stored alongside the originals (Phase 5 naming).
+                "state_features": output.state_features.tolist(),
+                "inter_event_times": output.inter_event_times.tolist(),
                 "origin": float(output.origin),
                 "time_scale_params": scale_params,
                 "state_names": output.state_names,
@@ -413,10 +458,18 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
             event_types = loaded.get("event_types")
             intensity_feats = loaded.get("intensity_features")
             event_type_names = loaded.get("event_type_names")
+            # Accept the new keys if present, fall back to the original keys
+            # so files written before the Phase 5 alias still load.
+            states = loaded["state_features"] if "state_features" in loaded else loaded["states"]
+            inter_times = (
+                loaded["inter_event_times"]
+                if "inter_event_times" in loaded
+                else loaded["inter_times"]
+            )
             return StreamOutput(
                 timestamps=loaded["timestamps"],
-                states=loaded["states"],
-                inter_times=loaded["inter_times"],
+                states=states,
+                inter_times=inter_times,
                 event_types=event_types if event_types is not None else None,
                 intensity_features=intensity_feats if intensity_feats is not None else None,
                 origin=float(loaded["origin"]),
@@ -431,10 +484,12 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
                 data = torch.load(path, weights_only=False)
                 event_types = data.get("event_types")
                 intensity_feats = data.get("intensity_features")
+                states = data.get("state_features", data.get("states"))
+                inter_times = data.get("inter_event_times", data.get("inter_times"))
                 return StreamOutput(
                     timestamps=data["timestamps"].numpy(),
-                    states=data["states"].numpy(),
-                    inter_times=data["inter_times"].numpy(),
+                    states=states.numpy(),
+                    inter_times=inter_times.numpy(),
                     event_types=event_types.numpy() if event_types is not None else None,
                     intensity_features=(
                         intensity_feats.numpy() if intensity_feats is not None else None
@@ -450,10 +505,12 @@ class StreamAdapter(BaseModalityAdapter[StreamOutput]):
         elif fmt == SerializationFormat.JSON:
             data = json.loads(path.read_text(encoding="utf-8"))
             event_types = data.get("event_types")
+            states = data.get("state_features", data.get("states"))
+            inter_times = data.get("inter_event_times", data.get("inter_times"))
             return StreamOutput(
                 timestamps=np.array(data["timestamps"]),
-                states=np.array(data["states"]),
-                inter_times=np.array(data["inter_times"]),
+                states=np.array(states),
+                inter_times=np.array(inter_times),
                 event_types=np.array(event_types) if event_types else None,
                 origin=data["origin"],
                 time_scale_params=data.get("time_scale_params", {}),
