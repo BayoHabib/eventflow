@@ -24,17 +24,17 @@ import polars as pl
 import shapely
 from shapely.geometry import shape
 
-from eventflow.core import CadenceRule, EventFrame, EventMetadata, EventSchema, ObservationPanel
-from eventflow.core.domain import SpatialDomain
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.spatial import assign_to_grid, create_grid, transform_crs
-from eventflow.core.steps.domain import GridDomainCoverageStep, SpatialDomainMaskStep
-from eventflow.core.steps.observation import ObservationPanelStep
-from eventflow.core.steps.point_process import KFunctionStep
-from eventflow.core.steps.spatial import AssignToGridStep, SpatialLagStep
-from eventflow.core.steps.temporal import TemporalLagStep
-from eventflow.datasets.chicago_crime.mapping import load_chicago_crime
-from eventflow.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCrimeV1Recipe
+from shikong.core import CadenceRule, EventFrame, EventMetadata, EventSchema, ObservationPanel
+from shikong.core.domain import SpatialDomain
+from shikong.core.schema import RecipeConfig
+from shikong.core.spatial import assign_to_grid, create_grid, transform_crs
+from shikong.core.steps.domain import GridDomainCoverageStep, SpatialDomainMaskStep
+from shikong.core.steps.observation import ObservationPanelStep
+from shikong.core.steps.point_process import KFunctionStep
+from shikong.core.steps.spatial import AssignToGridStep, SpatialLagStep
+from shikong.core.steps.temporal import TemporalLagStep
+from shikong.datasets.chicago_crime.mapping import load_chicago_crime
+from shikong.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCrimeV1Recipe
 
 
 def replay(audit_root: Path) -> dict[str, Any]:
@@ -225,7 +225,7 @@ def main() -> None:
     started = time.perf_counter()
     result = replay(args.audit_root)
     result["elapsed_seconds"] = time.perf_counter() - started
-    source = Path(__file__).resolve().parents[1] / "src/eventflow"
+    source = Path(__file__).resolve().parents[1] / "src/shikong"
     result["tested_source_sha256"] = {
         str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(source.rglob("*.py"))

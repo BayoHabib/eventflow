@@ -3,7 +3,7 @@
 This is coordinator integration work for Phase 4, criterion 7. It wires
 together what the three workers built separately:
 
-- worker A: ``src/eventflow/evaluation/`` (blocked splits, walk-forward
+- worker A: ``src/shikong/evaluation/`` (blocked splits, walk-forward
   harness, PAI / PR-AUC);
 - worker B: ``CategoryCountsStep.fit()`` / ``FittableStep``;
 - worker C: the synthetic generator and the planted-leak demonstration.
@@ -37,10 +37,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from eventflow.core.steps.categorical import CategoryCountsStep
-from eventflow.evaluation.metrics import pr_auc_score
-from eventflow.evaluation.splits import temporal_split, validate_split
-from eventflow.evaluation.walkforward import evaluate_walk_forward, walk_forward_splits
+from shikong.core.steps.categorical import CategoryCountsStep
+from shikong.evaluation.metrics import pr_auc_score
+from shikong.evaluation.splits import temporal_split, validate_split
+from shikong.evaluation.walkforward import evaluate_walk_forward, walk_forward_splits
 from tests.evaluation.synthetic import events_event_frame, generate_synthetic_panel
 
 HIGH_COUNT = 6

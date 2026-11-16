@@ -10,9 +10,9 @@ import pytest
 from pyproj import Transformer
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema, SpatialDomain
-from eventflow.core.steps import get_default_registry
-from eventflow.core.steps.point_process import KFunctionStep
+from shikong.core import EventFrame, EventMetadata, EventSchema, SpatialDomain
+from shikong.core.steps import get_default_registry
+from shikong.core.steps.point_process import KFunctionStep
 
 
 def points(coords=((2.0, 2.0), (4.0, 2.0), (8.0, 8.0)), crs="EPSG:3857"):

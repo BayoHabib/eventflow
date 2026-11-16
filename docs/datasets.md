@@ -1,6 +1,6 @@
 # Dataset Documentation
 
-This document describes the datasets supported by Eventflow and how to add new datasets.
+This document describes the datasets supported by Shikong and how to add new datasets.
 
 ## Supported Datasets
 
@@ -60,7 +60,7 @@ stations, 2013-03-01 → 2017-02-28 (35,064 hours each); 6 pollutants
 string `NA`. Total 420,768 rows.
 
 **Loader**: `load_beijing_air_quality(raw_path, config=None,
-apply_cleaning=True)` in `src/eventflow/datasets/beijing_air_quality/mapping.py`
+apply_cleaning=True)` in `src/shikong/datasets/beijing_air_quality/mapping.py`
 — accepts a directory of per-station CSVs, one CSV, or one Parquet file.
 
 **Available Recipes**:
@@ -83,7 +83,7 @@ event; entity = user (`user_id`), a trajectory (`trajectory_id`, the
 are WGS 84, projected to UTM 50N (EPSG:32650) for distance work.
 
 **Loader**: `load_geolife(paths, *, user_ids=None, metadata=None)` in
-`src/eventflow/datasets/geolife/loader.py` — loads `.plt` files, one
+`src/shikong/datasets/geolife/loader.py` — loads `.plt` files, one
 trajectory each.
 
 **Available Recipes**:
@@ -101,14 +101,14 @@ trajectory each.
 
 ## Adding a New Dataset
 
-To add a new dataset to Eventflow, follow these steps:
+To add a new dataset to Shikong, follow these steps:
 
 ### 1. Create Dataset Package
 
-Create a new package under `src/eventflow/datasets/`:
+Create a new package under `src/shikong/datasets/`:
 
 ```
-src/eventflow/datasets/your_dataset/
+src/shikong/datasets/your_dataset/
 ├── __init__.py
 ├── schema.py
 ├── mapping.py
@@ -125,7 +125,7 @@ src/eventflow/datasets/your_dataset/
 In `schema.py`, define the dataset schema:
 
 ```python
-from eventflow.core.schema import EventSchema
+from shikong.core.schema import EventSchema
 
 YOUR_DATASET_SCHEMA = EventSchema(
     timestamp_col="timestamp",
@@ -142,7 +142,7 @@ In `mapping.py`, implement the loader:
 
 ```python
 import polars as pl
-from eventflow.core.event_frame import EventFrame
+from shikong.core.event_frame import EventFrame
 from .schema import YOUR_DATASET_SCHEMA
 
 def load_your_dataset(raw_path: str) -> EventFrame:
@@ -169,7 +169,7 @@ def load_your_dataset(raw_path: str) -> EventFrame:
 In `context/`, implement context sources:
 
 ```python
-from eventflow.core.context.sources import BaseContextSource
+from shikong.core.context.sources import BaseContextSource
 import polars as pl
 
 class YourContextSource(BaseContextSource):
@@ -192,9 +192,9 @@ class YourContextSource(BaseContextSource):
 In `recipes/`, create pre-built pipelines:
 
 ```python
-from eventflow.recipes.base import BaseRecipe
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps.temporal import TimeBinsStep, TemporalLagStep
+from shikong.recipes.base import BaseRecipe
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps.temporal import TimeBinsStep, TemporalLagStep
 
 class YourDatasetV1Recipe(BaseRecipe):
     def build_pipeline(self) -> Pipeline:
@@ -211,7 +211,7 @@ class YourDatasetV1Recipe(BaseRecipe):
 In `__init__.py`:
 
 ```python
-from eventflow.recipes.registry import register_recipe
+from shikong.recipes.registry import register_recipe
 from .recipes.your_recipe_v1 import YourDatasetV1Recipe
 
 register_recipe("your_dataset", "v1", YourDatasetV1Recipe)
@@ -289,6 +289,6 @@ lf = lf.filter(
 
 ## Need Help?
 
-- Check existing dataset implementations in `src/eventflow/datasets/`
+- Check existing dataset implementations in `src/shikong/datasets/`
 - See the [API Reference](api_reference.md) for core abstractions
 - Open an issue on GitHub for questions

@@ -1,6 +1,6 @@
 # Independent observation quality and cadence checks
 
-EventFlow keeps four different questions separate:
+Shikong keeps four different questions separate:
 
 | Information | Meaning | What it does not establish |
 |---|---|---|
@@ -20,7 +20,7 @@ outside. The library does not discover the study domain from event locations.
 ```python
 from datetime import datetime, timedelta
 import polars as pl
-from eventflow.core import ObservationPanel
+from shikong.core import ObservationPanel
 
 t = datetime(2024, 1, 1)
 reference = pl.DataFrame({
@@ -56,7 +56,7 @@ scheduled measurements or heartbeats, not automatically for an irregular event
 stream such as incidents, purchases or animal sightings.
 
 ```python
-from eventflow.core import CadenceRule
+from shikong.core import CadenceRule
 
 records = pl.DataFrame({
     "site": ["A"] * 4,
@@ -114,7 +114,7 @@ declarations either. Default `on_gap="report"` preserves them for inspection;
 ## Pipeline integration
 
 ```python
-from eventflow.core.steps import ObservationPanelStep
+from shikong.core.steps import ObservationPanelStep
 
 step = ObservationPanelStep(
     panel,

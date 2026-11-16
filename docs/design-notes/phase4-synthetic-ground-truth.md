@@ -5,7 +5,7 @@ examples) of `phase4-exit-criteria.md`. Work by worker C; the
 evaluation harness itself (splitters, walk-forward, PAI/PR-AUC as
 library metrics) is worker A's and is not used here — the demo and
 example scripts below compute their metrics locally with plain
-Polars/NumPy and never import `src/eventflow/evaluation/`.
+Polars/NumPy and never import `src/shikong/evaluation/`.
 
 ## 1. The generator (`tests/evaluation/synthetic.py`)
 

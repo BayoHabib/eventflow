@@ -6,7 +6,7 @@ coverage 85%.
 
 ## 1. The `FittableStep` contract
 
-Defined in `src/eventflow/core/pipeline.py`, next to `Step`:
+Defined in `src/shikong/core/pipeline.py`, next to `Step`:
 
 ```python
 class FittableStep(Protocol):
@@ -40,7 +40,7 @@ forced by the repo as it stands:
 - The protocol is **not** `@runtime_checkable`, and steps do not inherit
   from it: conformance is structural. The walk-forward harness detects
   fittable steps with `hasattr(step, "fit")` (see
-  `src/eventflow/evaluation/walkforward.py`), so no `isinstance` check
+  `src/shikong/evaluation/walkforward.py`), so no `isinstance` check
   is needed. `CategoryCountsStep` satisfies the protocol structurally.
 
 `Step`, `Pipeline`, and every other behaviour in `pipeline.py` are
@@ -48,7 +48,7 @@ untouched.
 
 ## 2. `CategoryCountsStep` fit/freeze
 
-API (all in `src/eventflow/core/steps/categorical.py`):
+API (all in `src/shikong/core/steps/categorical.py`):
 
 - `fit(event_frame) -> CategoryCountsStep` — computes the top-N
   vocabulary per category column from the given frame only, reusing the
@@ -128,8 +128,8 @@ calls `fit`, once per fold, on the train window.
 
 ## 4. Fitted-statistics inventory
 
-Method: every `.collect()` call in `src/eventflow/core/steps/*.py` and
-`src/eventflow/core/*.py` was inspected, plus `encode_categorical` in
+Method: every `.collect()` call in `src/shikong/core/steps/*.py` and
+`src/shikong/core/*.py` was inspected, plus `encode_categorical` in
 `core/features.py`. Classification:
 
 - **(a) per-frame computation** — the collected data is used to compute

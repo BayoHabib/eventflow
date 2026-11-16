@@ -6,11 +6,11 @@ import polars as pl
 import pytest
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema, GridSpec, SpatialDomain
-from eventflow.core.grid import MAX_GRID_INDEX, grid_cell_id
-from eventflow.core.spatial import assign_to_grid, create_grid
-from eventflow.core.steps.domain import GridDomainCoverageStep
-from eventflow.core.steps.spatial import AssignToGridStep
+from shikong.core import EventFrame, EventMetadata, EventSchema, GridSpec, SpatialDomain
+from shikong.core.grid import MAX_GRID_INDEX, grid_cell_id
+from shikong.core.spatial import assign_to_grid, create_grid
+from shikong.core.steps.domain import GridDomainCoverageStep
+from shikong.core.steps.spatial import AssignToGridStep
 
 
 def points(x, y):

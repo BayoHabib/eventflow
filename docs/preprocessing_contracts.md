@@ -54,10 +54,10 @@ supplied in a reference table using WKT `geometry` instead.
 distance bands from reference `x`/`y` coordinates in the EventFrame's metric
 CRS. KNN ties follow reference-table order. Thresholds are in meters. If the
 events contain multiple positions per unit, supply one representative location
-per unit explicitly; EventFlow does not choose an event centroid implicitly.
+per unit explicitly; Shikong does not choose an event centroid implicitly.
 
 ```python
-from eventflow.core.weights import SpatialWeights
+from shikong.core.weights import SpatialWeights
 
 # Caller-defined connectivity can exclude edges crossing a river, or follow a
 # supplied transport/network graph. Include reverse edges if appropriate.

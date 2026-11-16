@@ -11,9 +11,9 @@ import polars as pl
 import pytest
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema
-from eventflow.core.domain import SpatialDomain
-from eventflow.core.pipeline import (
+from shikong.core import EventFrame, EventMetadata, EventSchema
+from shikong.core.domain import SpatialDomain
+from shikong.core.pipeline import (
     AsyncStep,
     ConditionalStep,
     LambdaStep,
@@ -21,10 +21,10 @@ from eventflow.core.pipeline import (
     Pipeline,
     Step,
 )
-from eventflow.core.registry import FeatureStepRegistry
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.steps import SpatialDomainMaskStep
-from eventflow.recipes.base import BaseRecipe
+from shikong.core.registry import FeatureStepRegistry
+from shikong.core.schema import RecipeConfig
+from shikong.core.steps import SpatialDomainMaskStep
+from shikong.recipes.base import BaseRecipe
 
 
 @pytest.fixture

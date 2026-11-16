@@ -8,9 +8,9 @@ from typing import Any
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.streaming import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.streaming import (
     EventBufferStep,
     OnlineStatisticsStep,
     StreamEvent,
@@ -454,7 +454,7 @@ class TestStreamingStepBase:
 
     def test_batch_steps_not_streaming(self, sample_event_frame: EventFrame) -> None:
         """Test that batch steps are not StreamingStep instances."""
-        from eventflow.core.steps.point_process import HawkesKernelStep
+        from shikong.core.steps.point_process import HawkesKernelStep
 
         step = HawkesKernelStep(alpha=0.3, beta=1.0, mu=0.1)
         assert not isinstance(step, StreamingStep)

@@ -1,4 +1,4 @@
-# EventFlow — development targets (phase 0)
+# Shikong — development targets (phase 0)
 #
 # Run inside the dev venv:  pip install -e ".[dev]"
 # Then:  make audit   (single command, writes audit/phase-1/)

@@ -6,11 +6,11 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.registry import FeatureStepRegistry
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.registration import register_builtin_steps
-from eventflow.core.steps.temporal import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.registry import FeatureStepRegistry
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.registration import register_builtin_steps
+from shikong.core.steps.temporal import (
     CalendarEncodingConfig,
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,

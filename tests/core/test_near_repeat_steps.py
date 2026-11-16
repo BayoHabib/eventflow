@@ -9,9 +9,9 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.near_repeat import NearRepeatConfig, NearRepeatStep
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.near_repeat import NearRepeatConfig, NearRepeatStep
 
 START = datetime(2024, 1, 1)
 

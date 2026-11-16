@@ -23,7 +23,7 @@ Chicago replay (``scripts/audit.py``) checks the same invariants on real
 data (``sum(count)``, no null counts, ``observation_status``); it does not
 assert non-null ``time_bin`` on zero rows either.
 
-Usage (from a checkout, or anywhere once ``eventflow`` is installed)::
+Usage (from a checkout, or anywhere once ``shikong`` is installed)::
 
     python examples/chicago_quickstart.py [--config PATH] [--out-dir DIR]
 
@@ -44,10 +44,10 @@ from pathlib import Path
 import polars as pl
 import yaml
 
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.steps.registration import get_default_registry
-from eventflow.datasets.chicago_crime.mapping import load_chicago_crime
-from eventflow.recipes.registry import get_recipe
+from shikong.core.schema import RecipeConfig
+from shikong.core.steps.registration import get_default_registry
+from shikong.datasets.chicago_crime.mapping import load_chicago_crime
+from shikong.recipes.registry import get_recipe
 
 N_EVENTS = 120
 N_DAYS = 3
@@ -65,7 +65,7 @@ def find_repo_root(start: Path) -> Path:
         if (parent / "pyproject.toml").exists():
             return parent
     raise FileNotFoundError(
-        "Could not locate the EventFlow checkout (no pyproject.toml found above "
+        "Could not locate the Shikong checkout (no pyproject.toml found above "
         f"{start}). Pass --config explicitly."
     )
 

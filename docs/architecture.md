@@ -1,15 +1,15 @@
-# Eventflow Architecture
+# Shikong Architecture
 
 ## Overview
 
-Eventflow is a generic library for preparing spatio-temporal datasets before analysis.
+Shikong is a generic library for preparing spatio-temporal datasets before analysis.
 Reusable transformations live in the core; dataset adapters and recipes supply
 source mappings, parameters, and domain-specific choices. Statistical analyses and
 model training operate downstream on the prepared outputs.
 
 ## Architecture Layers
 
-### 1. Core Layer (`eventflow.core`)
+### 1. Core Layer (`shikong.core`)
 
 The core layer contains all dataset-agnostic abstractions and primitives:
 
@@ -23,7 +23,7 @@ The core layer contains all dataset-agnostic abstractions and primitives:
 - **Context enrichment** (`context/`): Abstract sources and join strategies
 - **Pipeline orchestration** (`pipeline.py`): Composable step-based execution
 
-### 2. Dataset Layer (`eventflow.datasets`)
+### 2. Dataset Layer (`shikong.datasets`)
 
 Dataset-specific adapters that map real-world data to core abstractions:
 
@@ -32,7 +32,7 @@ Dataset-specific adapters that map real-world data to core abstractions:
 - **Context sources**: Dataset-specific implementations (weather, events, demographics)
 - **Recipes**: Pre-built pipelines for common use cases
 
-### 3. Recipe Layer (`eventflow.recipes`)
+### 3. Recipe Layer (`shikong.recipes`)
 
 Generic recipe mechanism for composable feature engineering:
 
@@ -40,7 +40,7 @@ Generic recipe mechanism for composable feature engineering:
 - **Recipe registry**: Discovery and instantiation of recipes
 - **Configuration**: YAML-based recipe configuration
 
-### 4. Tracking Layer (`eventflow.tracking`)
+### 4. Tracking Layer (`shikong.tracking`)
 
 Optional experiment tracking integration:
 
@@ -52,7 +52,7 @@ Optional experiment tracking integration:
 
 ### Lazy Evaluation
 
-Eventflow uses Polars LazyFrame as the primary data structure, deferring computation until `.collect()` is called. This enables:
+Shikong uses Polars LazyFrame as the primary data structure, deferring computation until `.collect()` is called. This enables:
 
 - Query optimization
 - Reduced memory footprint
@@ -88,9 +88,9 @@ Central abstraction that wraps:
 A sequence of Steps that transform EventFrames:
 
 ```python
-from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
-from eventflow.core.steps import AssignToGridStep, GridAggregationStep
-from eventflow.core.steps.temporal import TimeBinsStep
+from shikong.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from shikong.core.steps import AssignToGridStep, GridAggregationStep
+from shikong.core.steps.temporal import TimeBinsStep
 
 # weather.csv: ts,temp_c / 2024-01-01 00:00:00,10.0 / 2024-01-01 01:00:00,11.0
 weather_source = TabularFileSource("weather.csv", timestamp_col="ts", value_cols=["temp_c"])
@@ -104,7 +104,7 @@ result = pipeline.run(event_frame)
 ```
 
 For production workflows, steps can be registered centrally and resolved at runtime. The
-`eventflow.core.registry.StepRegistry` keeps track of reusable step classes, supports
+`shikong.core.registry.StepRegistry` keeps track of reusable step classes, supports
 discoverability via tags, and can materialize a `Pipeline` from configuration-driven step
 definitions (for example, `config.features["steps"]` in a recipe). This enables a clean
 separation between step implementation and recipe assembly.
@@ -125,7 +125,7 @@ Multi-stage process:
 
 ## Extension Points
 
-1. **New datasets**: Implement in `eventflow.datasets.<dataset_name>`
+1. **New datasets**: Implement in `shikong.datasets.<dataset_name>`
 2. **New context sources**: Subclass `BaseContextSource`
 3. **New features**: Add a tested Step in `steps/` and register it (preferred); `features.py` is partly experimental — see its module docstring before adding functions there
 4. **New recipes**: Register in recipe registry

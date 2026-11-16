@@ -26,14 +26,14 @@ to any computation: naming, packaging, reproducible examples, docs.
 
 ### Packaging
 - `pyproject.toml`: license now `{file = "LICENSE"}`; the fake author
-  email `team@eventflow.dev` removed (maintainer must add a real contact
+  email `team@shikong.dev` removed (maintainer must add a real contact
   before the first upload — flagged in `docs/release.md`). Version stays
   `0.1.0`, Alpha. No missing runtime dependency found.
-- `python -m build` from a clean checkout → `eventflow-0.1.0.tar.gz` +
-  `eventflow-0.1.0-py3-none-any.whl`; `twine check` PASSED on both
+- `python -m build` from a clean checkout → `shikong-0.1.0.tar.gz` +
+  `shikong-0.1.0-py3-none-any.whl`; `twine check` PASSED on both
   (logs: `audit/phase-5/build.log`, `audit/phase-5/twine_check.log`).
 - Clean install verified in a fresh venv from the wheel only:
-  `eventflow --help`, `eventflow version` → 0.1.0, `validate` on the
+  `shikong --help`, `shikong version` → 0.1.0, `validate` on the
   Chicago recipe (21 steps), `examples/chicago_quickstart.py`
   (120 events → 516 rows, sum `count` = 120, 0 null counts), CLI run to
   Parquet. **No upload performed** — publishing is the maintainer's

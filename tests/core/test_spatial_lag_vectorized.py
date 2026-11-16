@@ -3,7 +3,7 @@ spatial lag (Phase 2, Decisions 1 + 2).
 
 The old (Phase 1) implementation of ``SpatialLagStep.run()`` is kept here as
 ``_old_spatial_lag`` — copied verbatim from
-``src/eventflow/core/steps/spatial.py`` at main @ ``36aa7ec``, minus the
+``src/shikong/core/steps/spatial.py`` at main @ ``36aa7ec``, minus the
 provenance registration (which does not affect values) — and used as the
 oracle for the vectorized rewrite.
 """
@@ -20,16 +20,16 @@ import pytest
 from polars.testing import assert_frame_equal
 from pydantic import ValidationError
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.spatial import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.spatial import (
     MultiScaleSpatialLagConfig,
     MultiScaleSpatialLagStep,
     SpatialLagStep,
     _spatial_result,
     _spatial_snapshots,
 )
-from eventflow.core.weights import SpatialWeights
+from shikong.core.weights import SpatialWeights
 
 # -----------------------------------------------------------------------------
 # Old implementation (oracle), copied verbatim from Phase 1

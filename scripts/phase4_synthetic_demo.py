@@ -4,7 +4,7 @@
 Standalone: it imports only the synthetic generator
 (``tests.evaluation.synthetic``) and computes everything else with plain
 Polars/NumPy in this file. It does NOT import the evaluation harness
-(``src/eventflow/evaluation/``) — the harness-level detection of the
+(``src/shikong/evaluation/``) — the harness-level detection of the
 leak (``validate_split`` rejecting the leaking split) is coordinator
 integration work; this script demonstrates WHY blocking matters.
 

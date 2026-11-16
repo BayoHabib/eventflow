@@ -14,10 +14,10 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.temporal import MovingAverageStep, TemporalLagStep
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.panel import CompletePanelStep
+from shikong.core.steps.temporal import MovingAverageStep, TemporalLagStep
 
 
 def _collect_heights(monkeypatch):

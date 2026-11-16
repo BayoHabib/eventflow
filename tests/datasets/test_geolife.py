@@ -16,22 +16,22 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema, RecipeConfig
-from eventflow.core.steps.categorical import CategoryCountsStep
-from eventflow.core.steps.density import KernelDensityStep
-from eventflow.core.steps.dynamics import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema, RecipeConfig
+from shikong.core.steps.categorical import CategoryCountsStep
+from shikong.core.steps.density import KernelDensityStep
+from shikong.core.steps.dynamics import (
     BurstinessStep,
     EWMAMeanStep,
     TimeSinceLastEventStep,
     TrendStep,
     ZeroFeaturesStep,
 )
-from eventflow.core.steps.hawkes import HawkesExcitationStep
-from eventflow.core.steps.near_repeat import NearRepeatStep
-from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep
-from eventflow.core.steps.temporal import (
+from shikong.core.steps.hawkes import HawkesExcitationStep
+from shikong.core.steps.near_repeat import NearRepeatStep
+from shikong.core.steps.panel import CompletePanelStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep
+from shikong.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
     FillNullStep,
@@ -41,9 +41,9 @@ from eventflow.core.steps.temporal import (
     TemporalLagStep,
     TimeBinsStep,
 )
-from eventflow.datasets.geolife.kinematics import TrajectoryKinematicsStep
-from eventflow.datasets.geolife.loader import load_geolife, parse_plt
-from eventflow.datasets.geolife.recipes.geolife_v1 import GeoLifeV1Recipe
+from shikong.datasets.geolife.kinematics import TrajectoryKinematicsStep
+from shikong.datasets.geolife.loader import load_geolife, parse_plt
+from shikong.datasets.geolife.recipes.geolife_v1 import GeoLifeV1Recipe
 
 _EPOCH = date(1899, 12, 30)
 _PLT_HEADER = (

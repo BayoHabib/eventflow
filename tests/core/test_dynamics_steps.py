@@ -8,9 +8,9 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.dynamics import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.dynamics import (
     BurstinessConfig,
     BurstinessStep,
     EWMAMeanConfig,
@@ -22,7 +22,7 @@ from eventflow.core.steps.dynamics import (
     ZeroFeaturesConfig,
     ZeroFeaturesStep,
 )
-from eventflow.core.steps.temporal import MovingAverageStep
+from shikong.core.steps.temporal import MovingAverageStep
 
 # Hand-chosen counts including zeros, 2 units x 10 daily bins.
 UNIT_A_COUNTS = [0, 2, 0, 4, 1, 0, 0, 3, 0, 2]

@@ -2,7 +2,7 @@
 
 ## What was built
 
-`TabularFileSource` (`src/eventflow/core/context/tabular.py`), a generic
+`TabularFileSource` (`src/shikong/core/context/tabular.py`), a generic
 external-table connector in `core/` — no dataset-specific code. It
 loads one local CSV or Parquet file under a declared schema:
 
@@ -17,7 +17,7 @@ It subclasses the existing `DynamicTemporalSource`, so it plugs into
 the existing `EnricherStep` / `TemporalJoin` machinery, and its
 `load()` output feeds the existing `TemporalContextJoinStep`,
 `SpatialContextJoinStep`, and `SpatioTemporalContextJoinStep`
-unchanged. Exported from `eventflow.core.context`.
+unchanged. Exported from `shikong.core.context`.
 
 ## Validation discipline
 

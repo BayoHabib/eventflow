@@ -4,11 +4,11 @@
 import sys
 from pathlib import Path
 
-from eventflow.cli.main import app
+from shikong.cli.main import app
 
 
 def main() -> None:
-    """Execute the same validated pipeline as the eventflow CLI."""
+    """Execute the same validated pipeline as the shikong CLI."""
     root = Path(__file__).resolve().parent.parent
     app(
         [

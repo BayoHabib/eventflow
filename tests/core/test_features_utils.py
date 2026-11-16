@@ -12,9 +12,9 @@ from datetime import datetime
 
 import polars as pl
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.features import compute_ratios
-from eventflow.core.schema import EventMetadata, EventSchema
+from shikong.core.event_frame import EventFrame
+from shikong.core.features import compute_ratios
+from shikong.core.schema import EventMetadata, EventSchema
 
 
 def _frame(numerator: list[float], denominator: list[float]) -> EventFrame:
@@ -58,7 +58,7 @@ def test_compute_ratios_zero_denominator_is_null() -> None:
 
 def test_removed_functions_are_gone() -> None:
     """aggregate_counts / moving_window_aggregation / lag_features were deleted."""
-    import eventflow.core.features as features
+    import shikong.core.features as features
 
     for name in ("aggregate_counts", "moving_window_aggregation", "lag_features"):
         assert not hasattr(features, name), f"{name} should have been removed in phase 0"
@@ -66,7 +66,7 @@ def test_removed_functions_are_gone() -> None:
 
 def test_experimental_functions_are_documented_as_such() -> None:
     """Experimental functions must say so in their docstring."""
-    import eventflow.core.features as features
+    import shikong.core.features as features
 
     for name in ("aggregate_by_category", "encode_categorical", "normalize_features"):
         assert "EXPERIMENTAL" in getattr(features, name).__doc__

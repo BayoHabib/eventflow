@@ -19,11 +19,11 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps import (
+from shikong.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from shikong.core.event_frame import EventFrame
+from shikong.core.pipeline import Pipeline
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps import (
     BurstinessStep,
     CategoryCountsStep,
     CompletePanelStep,
@@ -33,12 +33,12 @@ from eventflow.core.steps import (
     TrendStep,
     ZeroFeaturesStep,
 )
-from eventflow.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
-from eventflow.core.steps.hawkes import HawkesExcitationStep
-from eventflow.core.steps.near_repeat import NearRepeatStep
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep, SpatialLagStep
-from eventflow.core.steps.temporal import MovingAverageStep, TemporalLagStep, TimeBinsStep
-from eventflow.evaluation import (
+from shikong.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
+from shikong.core.steps.hawkes import HawkesExcitationStep
+from shikong.core.steps.near_repeat import NearRepeatStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep, SpatialLagStep
+from shikong.core.steps.temporal import MovingAverageStep, TemporalLagStep, TimeBinsStep
+from shikong.evaluation import (
     blocked_split,
     evaluate_walk_forward,
     pai_score,
@@ -607,7 +607,7 @@ def test_docs_tabular_file_source(tmp_path: Path) -> None:
 
 def test_docs_registry_names() -> None:
     """api_reference: the documented registry names resolve and build."""
-    from eventflow.core.steps.registration import get_default_registry
+    from shikong.core.steps.registration import get_default_registry
 
     registry = get_default_registry()
     for name in (
@@ -638,9 +638,9 @@ def test_docs_phase2_steps_import_paths() -> None:
     """api_reference: phase-2 steps import from their own modules.
 
     They are registered (see test_docs_registry_names) but NOT re-exported
-    from ``eventflow.core.steps`` — the doc shows the real import path.
+    from ``shikong.core.steps`` — the doc shows the real import path.
     """
-    import eventflow.core.steps as steps
+    import shikong.core.steps as steps
 
     for name in (
         "MultiScaleSpatialLagStep",
@@ -691,7 +691,7 @@ def test_docs_api_reference_examples_present() -> None:
         "TemporalBinStep",
         "with_spatial_grid",
         "with_time_bins",
-        "https://github.com/eventflow/eventflow",
+        "https://github.com/shikong/shikong",
     ):
         assert stale not in text, f"stale text still in api_reference.md: {stale}"
 
@@ -726,8 +726,8 @@ def test_docs_pipeline_runs_end_to_end() -> None:
 
 def test_docs_datasets_template_recipe() -> None:
     """docs/datasets.md §5: the recipe template, executed as written."""
-    from eventflow.core.schema import RecipeConfig
-    from eventflow.recipes.base import BaseRecipe
+    from shikong.core.schema import RecipeConfig
+    from shikong.recipes.base import BaseRecipe
 
     class YourDatasetV1Recipe(BaseRecipe):
         def build_pipeline(self) -> Pipeline:
@@ -782,8 +782,8 @@ def test_docs_datasets_no_phantom_recipes() -> None:
 
 def test_docs_architecture_pipeline(tmp_path: Path) -> None:
     """docs/architecture.md: the Pipeline example, executed as written."""
-    from eventflow.core.steps import AssignToGridStep, GridAggregationStep
-    from eventflow.core.steps.temporal import TimeBinsStep
+    from shikong.core.steps import AssignToGridStep, GridAggregationStep
+    from shikong.core.steps.temporal import TimeBinsStep
 
     csv_path = tmp_path / "weather.csv"
     csv_path.write_text(
@@ -877,7 +877,7 @@ def test_docs_api_reference_adapter_aliases() -> None:
     itself (worker A section was lost once in a rewrite — this fails if
     the alias names disappear from the doc again).
     """
-    from eventflow.core.adapters import (
+    from shikong.core.adapters import (
         SequenceAdapter,
         SequenceAdapterConfig,
         StreamAdapter,

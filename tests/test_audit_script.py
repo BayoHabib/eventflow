@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def _load_audit_module():
     """Load scripts/audit.py as a module (it is not part of the package)."""
     spec = importlib.util.spec_from_file_location(
-        "eventflow_audit", REPO_ROOT / "scripts" / "audit.py"
+        "shikong_audit", REPO_ROOT / "scripts" / "audit.py"
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

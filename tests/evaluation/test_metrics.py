@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from eventflow.evaluation.metrics import pai_score, pr_auc_score
+from shikong.evaluation.metrics import pai_score, pr_auc_score
 
 
 def test_pai_perfect_ranking() -> None:

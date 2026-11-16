@@ -1,6 +1,6 @@
-# Eventflow API Reference
+# Shikong API Reference
 
-This document provides detailed API documentation for the Eventflow library.
+This document provides detailed API documentation for the Shikong library.
 
 > **Executed examples.** Every code example in this file is executed by
 > `tests/test_docs_examples.py` (phase 5 rule: no example is claimed from
@@ -26,8 +26,8 @@ at bins `<= t`.
 import polars as pl
 from datetime import datetime, timedelta
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
 
 BIN0 = datetime(2024, 1, 1)
 
@@ -62,7 +62,7 @@ def make_panel(counts_by_unit):
 
 ## Core Module
 
-### eventflow.core.schema
+### shikong.core.schema
 
 #### EventSchema
 
@@ -90,7 +90,7 @@ class ContextSchema(BaseModel):
     attribute_cols: list[str]
 ```
 
-### eventflow.core.event_frame
+### shikong.core.event_frame
 
 #### EventFrame
 
@@ -133,17 +133,17 @@ class EventFrame:
     def count(self) -> int: ...
 ```
 
-### eventflow.core.registry
+### shikong.core.registry
 
 #### FeatureStepRegistry
 
 Registry for discovering and instantiating reusable pipeline steps.
-`get_default_registry()` (in `eventflow.core.steps.registration`)
+`get_default_registry()` (in `shikong.core.steps.registration`)
 returns a registry with all built-in steps; the names are listed in
 [Step registry names](#step-registry-names) below.
 
 ```python
-from eventflow.core.steps.registration import get_default_registry
+from shikong.core.steps.registration import get_default_registry
 
 registry = get_default_registry()
 
@@ -160,7 +160,7 @@ pipeline = registry.build_pipeline([
 Each registry entry is represented by a `StepSpec` that tracks tags,
 documentation, and optional configuration schema metadata.
 
-### eventflow.core.spatial
+### shikong.core.spatial
 
 Functions for spatial operations:
 
@@ -174,7 +174,7 @@ Functions for spatial operations:
 - `compute_distances(event_frame, points)`: Distances to points of
   interest.
 
-### eventflow.core.temporal
+### shikong.core.temporal
 
 Functions for temporal operations:
 
@@ -187,7 +187,7 @@ Functions for temporal operations:
 - `compute_time_deltas(event_frame, ...)`: Time deltas between events.
 - `create_temporal_windows(event_frame, ...)`: Temporal windows.
 
-### eventflow.core.features
+### shikong.core.features
 
 Free functions for feature engineering. Most of this module is
 **experimental**; recipes use the tested Steps instead:
@@ -211,14 +211,14 @@ Removed in phase 0 (use the tested Steps instead): `aggregate_counts` →
 
 ## Pipeline Steps
 
-All steps inherit from `eventflow.core.pipeline.Step`, validate their
+All steps inherit from `shikong.core.pipeline.Step`, validate their
 parameters at construction (a bad parameter fails there, never silently
 at `run()` time), and register every produced column with provenance.
 Steps that learn statistics from data implement the `FittableStep`
 protocol (`fit(event_frame) -> Self`, `is_fitted -> bool`) — see
 [Fit / freeze](#fit--freeze-fittablestep).
 
-### eventflow.core.steps.temporal
+### shikong.core.steps.temporal
 
 #### TimeBinsStep
 
@@ -314,8 +314,8 @@ phase-1 use case is a lag before the panel start (no data exists
 before the observation window, so the lagged count is treated as 0).
 
 ```python
-from eventflow.core.steps import FillNullStep
-from eventflow.core.steps.temporal import TemporalLagStep
+from shikong.core.steps import FillNullStep
+from shikong.core.steps.temporal import TemporalLagStep
 
 frame = make_panel({u: [1.0, 2.0, 3.0, 4.0] for u in range(9)})
 frame = TemporalLagStep(
@@ -351,7 +351,7 @@ class RecencyWeightStep(Step):
 
 Exponential recency weights decaying from a reference time.
 
-### eventflow.core.steps.panel
+### shikong.core.steps.panel
 
 #### CompletePanelStep
 
@@ -400,7 +400,7 @@ class CompletePanelStep(Step):
   Duplicate (unit, time) pairs are rejected: aggregate first.
 
 ```python
-from eventflow.core.steps import CompletePanelStep
+from shikong.core.steps import CompletePanelStep
 
 # Sparse panel: 7 observed rows, 3 units x 4 daily bins; pm25 has 1 null.
 rows = [
@@ -440,7 +440,7 @@ the step completes 5,242 cells × 364 bins of 6 h = 1,908,088 rows with
 1,851,597 explicit-zero rows and 0 null counts; the sum of `count`
 stays 60,235 (see [phase2-spacetime-v2.md](design-notes/phase2-spacetime-v2.md)).
 
-### eventflow.core.steps.dynamics
+### shikong.core.steps.dynamics
 
 Dynamics steps operate on the completed panel (one row per unit × time
 bin, explicit zeros, never null counts). Window policies per step:
@@ -474,7 +474,7 @@ converted to bins using `metadata.time_bin` (so 7 d on a daily panel
 is 7 bins, on a 6-hour panel 28 bins).
 
 ```python
-from eventflow.core.steps import EWMAMeanStep
+from shikong.core.steps import EWMAMeanStep
 
 frame = make_panel({u: [1.0, 2.0, 3.0, 4.0] for u in range(9)})
 result = EWMAMeanStep(
@@ -501,8 +501,8 @@ Ratio of two existing rolling-mean columns (default output
 column is null or 0 — a zero denominator never produces `inf`.
 
 ```python
-from eventflow.core.steps import TrendStep
-from eventflow.core.steps.temporal import MovingAverageStep
+from shikong.core.steps import TrendStep
+from shikong.core.steps.temporal import MovingAverageStep
 
 frame = make_panel({u: [1.0, 2.0, 3.0, 4.0] for u in range(9)})
 frame = MovingAverageStep(
@@ -535,7 +535,7 @@ Null when no prior bin (including the current one) had an event.
 Only `"d"` is supported as `output_unit` in v1.
 
 ```python
-from eventflow.core.steps import TimeSinceLastEventStep
+from shikong.core.steps import TimeSinceLastEventStep
 
 counts = {u: [1.0, 1.0, 1.0, 1.0] for u in range(9)}
 counts[4] = [0.0, 0.0, 5.0, 0.0]
@@ -586,7 +586,7 @@ the current bin):
   bins with value > 0 in the trailing window.
 
 ```python
-from eventflow.core.steps import ZeroFeaturesStep
+from shikong.core.steps import ZeroFeaturesStep
 
 counts = {u: [1.0, 1.0, 1.0, 1.0] for u in range(9)}
 counts[4] = [0.0, 0.0, 5.0, 0.0]
@@ -597,7 +597,7 @@ assert unit4["count_active_7d"].to_list() == [False, False, True, True]
 assert unit4["count_share_nonzero_28d"].to_list()[-1] == 0.25  # 1 of 4 bins
 ```
 
-### eventflow.core.steps.categorical
+### shikong.core.steps.categorical
 
 #### CategoryCountsStep
 
@@ -638,7 +638,7 @@ class CategoryCountsStep(Step):
   `other` buckets; null when the total is 0).
 
 ```python
-from eventflow.core.steps import CategoryCountsStep
+from shikong.core.steps import CategoryCountsStep
 
 # Event rows: (grid_id, time_bin, primary_type); THEFT x3, BATTERY x3, ASSAULT x1.
 event_rows = [
@@ -710,7 +710,7 @@ assert "count_primary_type_ROBBERY" not in result.columns
 assert result["count_primary_type_other"].unique().to_list() == [5]
 ```
 
-### eventflow.core.steps.spatial
+### shikong.core.steps.spatial
 
 #### SpatialLagStep
 
@@ -748,7 +748,7 @@ Ring `r` is the set of cells at Chebyshev distance exactly `r`, so
 rings are disjoint and ring 1 reproduces `SpatialLagStep` exactly.
 
 ```python
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep, SpatialLagStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep, SpatialLagStep
 
 class MultiScaleSpatialLagStep(Step):
     def __init__(
@@ -808,7 +808,7 @@ Anselin local Moran's I and Getis-Ord Gi\* hotspot statistics. Both
 still use the per-snapshot helper (they were not part of the phase-2
 vectorization). See their class docstrings for the exact statistics.
 
-### eventflow.core.steps.density
+### shikong.core.steps.density
 
 #### KernelDensityStep
 
@@ -818,7 +818,7 @@ by the caller — no automatic estimation (estimating one on the full
 panel would be a fitted statistic and a leakage surface).
 
 ```python
-from eventflow.core.steps.density import KernelDensityStep
+from shikong.core.steps.density import KernelDensityStep
 
 class KernelDensityStep(Step):
     def __init__(
@@ -862,7 +862,7 @@ assert centre > corner
 Separable product kernel: Gaussian in space, exponential in time.
 
 ```python
-from eventflow.core.steps.density import SpaceTimeKernelDensityStep
+from shikong.core.steps.density import SpaceTimeKernelDensityStep
 
 class SpaceTimeKernelDensityStep(Step):
     def __init__(
@@ -894,7 +894,7 @@ elapsed time in bins. Eager, as `KernelDensityStep`.
 > pre-completion `time_bin`. The step rejects a null time column
 > with a blocking `ValueError`.
 
-### eventflow.core.steps.near_repeat
+### shikong.core.steps.near_repeat
 
 #### NearRepeatStep
 
@@ -905,7 +905,7 @@ queen ring `r`, the number of events in the ring over the trailing
 in the trailing 7 d.
 
 ```python
-from eventflow.core.steps.near_repeat import NearRepeatStep
+from shikong.core.steps.near_repeat import NearRepeatStep
 
 class NearRepeatStep(Step):
     def __init__(
@@ -941,7 +941,7 @@ assert row["count_nr_r1_7d"] == 8
 assert row["count_nr_event_7d"] == 1
 ```
 
-### eventflow.core.steps.hawkes
+### shikong.core.steps.hawkes
 
 #### HawkesExcitationStep
 
@@ -950,7 +950,7 @@ not a fitted Hawkes process: no parameter estimation, no
 background/excitation separation, no branching ratio.
 
 ```python
-from eventflow.core.steps.hawkes import HawkesExcitationStep
+from shikong.core.steps.hawkes import HawkesExcitationStep
 
 class HawkesExcitationStep(Step):
     def __init__(
@@ -1011,11 +1011,11 @@ assert unit4["count_hawkes_7d"].to_list()[3] > 0
 > **Import paths.** The phase-2 steps (`MultiScaleSpatialLagStep`,
 > `KernelDensityStep`, `SpaceTimeKernelDensityStep`, `NearRepeatStep`,
 > `HawkesExcitationStep`) are registered but **not** re-exported from
-> `eventflow.core.steps` — import them from their own modules as shown
+> `shikong.core.steps` — import them from their own modules as shown
 > in the sections above. Everything else in this section is importable
-> from `eventflow.core.steps`.
+> from `shikong.core.steps`.
 
-### eventflow.core.steps.observation
+### shikong.core.steps.observation
 
 #### ObservationPanelStep
 
@@ -1043,10 +1043,10 @@ class ObservationPanelStep(Step):
 
 ## Evaluation Module
 
-### eventflow.evaluation
+### shikong.evaluation
 
 Blocked splits, walk-forward evaluation, and downstream metrics.
-`eventflow.evaluation` exposes: `temporal_split`, `spatial_split`,
+`shikong.evaluation` exposes: `temporal_split`, `spatial_split`,
 `entity_split`, `partition_units`, `blocked_split`,
 `validate_split`, `walk_forward_splits`, `evaluate_walk_forward`,
 `pai_score`, `pr_auc_score`, `WalkForwardFold`, `FoldResult`.
@@ -1065,7 +1065,7 @@ embargo gap); spatial = disjoint unit sets; entity = disjoint entity
 sets. See [phase4-evaluation.md](design-notes/phase4-evaluation.md).
 
 ```python
-from eventflow.evaluation import (
+from shikong.evaluation import (
     blocked_split, temporal_split, validate_split,
 )
 from datetime import timedelta
@@ -1109,7 +1109,7 @@ test_entities)` are the single-dimension unit/entity splitters.
 #### Walk-forward
 
 ```python
-from eventflow.evaluation import walk_forward_splits, evaluate_walk_forward
+from shikong.evaluation import walk_forward_splits, evaluate_walk_forward
 
 def walk_forward_splits(
     frame: FrameLike,
@@ -1151,7 +1151,7 @@ pipeline runs on the train fold and on the test fold, and
 bounds, row counts, score dict).
 
 ```python
-from eventflow.evaluation import pai_score
+from shikong.evaluation import pai_score
 from tests.evaluation.synthetic import generate_synthetic_panel, panel_event_frame
 
 # Synthetic 2x2-unit x 20-bin panel, as an EventFrame.
@@ -1249,7 +1249,7 @@ place (see
 
 ## Context Module
 
-### eventflow.core.context.tabular
+### shikong.core.context.tabular
 
 #### TabularFileSource
 
@@ -1260,7 +1260,7 @@ under a declared schema, feeding the existing context join steps
 pattern of hand-rolling one loader per dataset.
 
 ```python
-from eventflow.core.context import TabularFileSource
+from shikong.core.context import TabularFileSource
 
 class TabularFileSource(DynamicTemporalSource):
     def __init__(
@@ -1297,7 +1297,7 @@ class TabularFileSource(DynamicTemporalSource):
   [phase3-connectors.md](design-notes/phase3-connectors.md).
 
 ```python
-from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from shikong.core.context import EnricherStep, TabularFileSource, TemporalJoin
 
 # weather.csv: ts,temp_c / 2024-01-01 00:00:00,10.0 / 2024-01-01 01:00:00,11.0
 source = TabularFileSource("weather.csv", timestamp_col="ts", value_cols=["temp_c"])
@@ -1329,7 +1329,7 @@ the Beijing range, real weather values) matches 8/9 with asof-backward
 
 ## Dataset Module
 
-### eventflow.datasets.chicago_crime
+### shikong.datasets.chicago_crime
 
 Chicago crime dataset adapter (City of Chicago Data Portal,
 Socrata). The loader normalizes ISO/legacy timestamps, numeric
@@ -1366,7 +1366,7 @@ Context sources (weather, special events, demographics) exist under
 (experimental); enabling any `context.<source>.enabled` in the
 Chicago recipe raises a blocking error.
 
-### eventflow.datasets.beijing_air_quality
+### shikong.datasets.beijing_air_quality
 
 Beijing Multi-Site Air Quality (UCI 501, Chen 2017): 12 stations ×
 hourly, 2013-03-01 → 2017-02-28 (35,064 hours each), 6 pollutants +
@@ -1405,7 +1405,7 @@ gaps / missing-stays-missing and per-station separation, **not**
 irregular sampling (regular hourly timestamps) — see
 [phase3-beijing.md](design-notes/phase3-beijing.md).
 
-### eventflow.datasets.geolife
+### shikong.datasets.geolife
 
 GeoLife GPS trajectories (Microsoft Research): one GPS fix is one
 event; entity = user (`user_id`), a trajectory (`trajectory_id`,
@@ -1448,7 +1448,7 @@ no conversion).
 
 ## Recipe Module
 
-### eventflow.recipes.base
+### shikong.recipes.base
 
 #### BaseRecipe
 
@@ -1475,7 +1475,7 @@ class BaseRecipe(ABC):
         ...
 ```
 
-`FeatureConfig` (`eventflow.core.schema`) declares the recipe's
+`FeatureConfig` (`shikong.core.schema`) declares the recipe's
 feature families; unknown or unimplemented keys are a blocking
 error, never silently ignored:
 
@@ -1501,7 +1501,7 @@ limitation): the Beijing recipe constructs `CompletePanelStep`
 directly. A recipe that wants YAML-declared `measure_cols` needs a
 `FeatureConfig` extension.
 
-### eventflow.recipes.registry
+### shikong.recipes.registry
 
 Recipe registration and discovery:
 
@@ -1515,7 +1515,7 @@ Registered recipes: `chicago_crime / chicago_crime_v1`,
 
 ## Tracking Module
 
-### eventflow.tracking.protocol
+### shikong.tracking.protocol
 
 #### TrackerProtocol
 
@@ -1527,26 +1527,26 @@ class TrackerProtocol(Protocol):
     def set_tags(self, tags: dict[str, str]) -> None: ...
 ```
 
-### eventflow.tracking.mlflow_tracker
+### shikong.tracking.mlflow_tracker
 
 MLflow implementation of TrackerProtocol (no test against a real
 MLflow backend).
 
 ## CLI Module
 
-### eventflow.cli.main
+### shikong.cli.main
 
 Command-line interface:
 
 ```bash
-eventflow run --dataset DATASET --recipe RECIPE --config CONFIG
-eventflow list-datasets
-eventflow list-recipes --dataset DATASET
-eventflow validate --config CONFIG
-eventflow version
+shikong run --dataset DATASET --recipe RECIPE --config CONFIG
+shikong list-datasets
+shikong list-recipes --dataset DATASET
+shikong validate --config CONFIG
+shikong version
 ```
 
-`eventflow run` also accepts `--input` (file or directory of one
+`shikong run` also accepts `--input` (file or directory of one
 format) and `--dataset-config`; `--input` overrides the config's
 `raw_root` when both are supplied. `output.partition_by` is not
 implemented and is rejected with a blocking error.
@@ -1584,7 +1584,7 @@ remain as domain-accurate spellings, already surfaced as
 `convert()` — masks and inter-event times are always returned.
 
 ```python
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     SequenceAdapter,
     SequenceAdapterConfig,
     StreamAdapter,
@@ -1622,11 +1622,11 @@ assert stream.data is stream.states
 ### Basic Usage
 
 ```python
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import (
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import (
     EWMAMeanStep, FillNullStep, TimeSinceLastEventStep, ZeroFeaturesStep,
 )
-from eventflow.core.steps.temporal import TemporalLagStep
+from shikong.core.steps.temporal import TemporalLagStep
 
 frame = make_panel({u: [1.0, 2.0, 3.0, 4.0] for u in range(9)})
 pipeline = Pipeline([
@@ -1646,7 +1646,7 @@ result = pipeline.run(frame).collect()
 ### With Context Enrichment
 
 ```python
-from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from shikong.core.context import EnricherStep, TabularFileSource, TemporalJoin
 
 # weather.csv: ts,temp_c / 2024-01-01 00:00:00,10.0 / 2024-01-01 01:00:00,11.0
 weather = TabularFileSource("weather.csv", timestamp_col="ts", value_cols=["temp_c"])

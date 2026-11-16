@@ -12,10 +12,10 @@ import polars as pl
 import pytest
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema, ObservationPanel
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import ObservationPanelStep, get_default_registry
-from eventflow.core.steps.temporal import TemporalLagStep
+from shikong.core import EventFrame, EventMetadata, EventSchema, ObservationPanel
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import ObservationPanelStep, get_default_registry
+from shikong.core.steps.temporal import TemporalLagStep
 
 T = datetime(2024, 1, 1)
 

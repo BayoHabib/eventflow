@@ -2,10 +2,10 @@
 
 import pytest
 
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.schema import RecipeConfig
-from eventflow.recipes.base import BaseRecipe
-from eventflow.recipes.registry import get_recipe, list_datasets, list_recipes, register_recipe
+from shikong.core.pipeline import Pipeline
+from shikong.core.schema import RecipeConfig
+from shikong.recipes.base import BaseRecipe
+from shikong.recipes.registry import get_recipe, list_datasets, list_recipes, register_recipe
 
 
 class DummyRecipe(BaseRecipe):

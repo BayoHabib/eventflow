@@ -15,9 +15,9 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.density import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.density import (
     KernelDensityConfig,
     KernelDensityStep,
     SpaceTimeKernelDensityConfig,

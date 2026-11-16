@@ -7,17 +7,17 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.pipeline import BranchingPipeline, Pipeline, StreamPipeline
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.point_process import HawkesKernelStep
-from eventflow.core.steps.streaming import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.pipeline import BranchingPipeline, Pipeline, StreamPipeline
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.point_process import HawkesKernelStep
+from shikong.core.steps.streaming import (
     OnlineStatisticsStep,
     StreamingHawkesStep,
     StreamingInterEventStep,
     StreamingWindowStep,
 )
-from eventflow.core.steps.temporal import ExtractTemporalComponentsStep
+from shikong.core.steps.temporal import ExtractTemporalComponentsStep
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-# Releasing EventFlow
+# Releasing Shikong
 
 How the maintainer ships a version to PyPI and tags it on GitHub.
 **No upload has been performed** — every step below is manual, and the
@@ -9,7 +9,7 @@ publishes anything on its own; CI does not upload to PyPI.
 
 - Working tree clean on `main`, CI green on the merge commit.
 - `make audit` PASS 5/5 (ruff, black, mypy, pytest, Chicago replay).
-- A PyPI account with access to the `eventflow` project, and a PyPI
+- A PyPI account with access to the `shikong` project, and a PyPI
   API token stored in `~/.pypirc` (or as `TWINE_USERNAME=__token__`
   / `TWINE_PASSWORD=<token>`). Never commit a token, and never paste
   one into chat.
@@ -28,7 +28,7 @@ publishes anything on its own; CI does not upload to PyPI.
   deliberately moves to Beta.
 - Bump the version in **two** places, and keep them in sync:
   `pyproject.toml` (`[project] version`) and
-  `src/eventflow/__init__.py` (`__version__`). `eventflow version`
+  `src/shikong/__init__.py` (`__version__`). `shikong version`
   prints the latter; PyPI shows the former.
 
 ### 2. Update the changelog
@@ -48,9 +48,9 @@ publishes anything on its own; CI does not upload to PyPI.
 - `pyproject.toml` audit checklist (see also the notes in the file):
   - `name`, `version`, `description`, `readme`, `requires-python`,
     `license`, `authors`, `classifiers`, `dependencies`,
-    `project.scripts` (`eventflow` console script), `project.urls`.
+    `project.scripts` (`shikong` console script), `project.urls`.
   - `authors` currently has no email: add a real contact email before
-    the first upload. Do not re-add `team@eventflow.dev` — it is not
+    the first upload. Do not re-add `team@shikong.dev` — it is not
     a real address.
   - Dependencies must be the ones the library imports at runtime.
     A missing runtime dependency only shows up on a clean install,
@@ -67,15 +67,15 @@ python -m build
 twine check dist/*
 ```
 
-Expected: `Successfully built eventflow-<version>.tar.gz and
-eventflow-<version>-py3-none-any.whl`, and `twine check` PASSED for
+Expected: `Successfully built shikong-<version>.tar.gz and
+shikong-<version>-py3-none-any.whl`, and `twine check` PASSED for
 both files. If `twine check` fails, fix the metadata and rebuild —
 do not upload a distribution that fails the check.
 
 Inspect the sdist at least once per release (`tar tzf
-dist/eventflow-<version>.tar.gz`): it must contain `LICENSE`,
-`README.md`, `pyproject.toml` and `src/eventflow/`. The wheel must
-contain `eventflow-*.dist-info/METADATA` with the right
+dist/shikong-<version>.tar.gz`): it must contain `LICENSE`,
+`README.md`, `pyproject.toml` and `src/shikong/`. The wheel must
+contain `shikong-*.dist-info/METADATA` with the right
 `Requires-Dist` entries and `licenses/LICENSE`.
 
 ### 5. Verify a clean install
@@ -86,10 +86,10 @@ output: `examples/README.md`):
 
 ```bash
 python -m venv /tmp/ef-clean-venv
-/tmp/ef-clean-venv/bin/python -m pip install dist/eventflow-<version>-py3-none-any.whl
-/tmp/ef-clean-venv/bin/eventflow --help
-/tmp/ef-clean-venv/bin/eventflow version
-/tmp/ef-clean-venv/bin/eventflow validate --config configs/recipes/chicago_crime_v1.yaml
+/tmp/ef-clean-venv/bin/python -m pip install dist/shikong-<version>-py3-none-any.whl
+/tmp/ef-clean-venv/bin/shikong --help
+/tmp/ef-clean-venv/bin/shikong version
+/tmp/ef-clean-venv/bin/shikong validate --config configs/recipes/chicago_crime_v1.yaml
 /tmp/ef-clean-venv/bin/python examples/chicago_quickstart.py
 ```
 
@@ -107,7 +107,7 @@ This is the only step that publishes anything. Use TestPyPI first
 for a first-time release (`twine upload --repository testpypi
 dist/*`), then the real index. After the upload, confirm the project
 page renders (README, license, classifiers) at
-`https://pypi.org/project/eventflow/`.
+`https://pypi.org/project/shikong/`.
 
 ### 7. Tag and release on GitHub
 

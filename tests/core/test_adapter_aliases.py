@@ -16,7 +16,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     GraphAdapter,
     GraphOutput,
     RasterOutput,

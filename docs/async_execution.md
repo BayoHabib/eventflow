@@ -1,6 +1,6 @@
 # Asynchronous pipeline execution
 
-EventFlow's ordinary `Pipeline` can be awaited inside an asyncio application.
+Shikong's ordinary `Pipeline` can be awaited inside an asyncio application.
 Existing synchronous steps run in worker threads. Native async steps can await
 their I/O directly. The synchronous `run()` API remains available.
 
@@ -23,7 +23,7 @@ An existing step needs no wrapper to participate in an asynchronous pipeline.
 For native asynchronous operations, implement `AsyncStep`:
 
 ```python
-from eventflow.core.pipeline import AsyncStep
+from shikong.core.pipeline import AsyncStep
 
 class ReferenceEnrichment(AsyncStep):
     def __init__(self, load_reference):
@@ -81,7 +81,7 @@ created on a different thread.
 ## Cancellation and errors
 
 - Cancelling a native async step follows its coroutine's cancellation behavior.
-- A running synchronous worker cannot be safely killed by Python. EventFlow
+- A running synchronous worker cannot be safely killed by Python. Shikong
   waits asynchronously for that worker to finish, discards its result, and
   propagates `asyncio.CancelledError`. It never starts the following step.
 - Repeated cancellation does not release pipeline ownership prematurely or leave

@@ -1,4 +1,4 @@
-# EventFlow examples
+# Shikong examples
 
 Runnable examples for the library. Every example here is executed —
 by `tests/integration/test_examples.py` in the suite and by hand in a
@@ -17,7 +17,7 @@ panel invariants the full Chicago replay checks on real data.
 python examples/chicago_quickstart.py [--config PATH] [--out-dir DIR]
 ```
 
-Expected output (measured 2026-11-15, `eventflow` 0.1.0):
+Expected output (measured 2026-11-15, `shikong` 0.1.0):
 
 ```text
 Input events:            120
@@ -53,7 +53,7 @@ assert non-null `time_bin` on zero rows.
 What a clean install of the released wheel must satisfy before any
 upload (full procedure: `docs/release.md`). Verified 2026-11-15
 against the wheel built from a clean copy of the tree
-(`eventflow-0.1.0-py3-none-any.whl`, `twine check` PASSED):
+(`shikong-0.1.0-py3-none-any.whl`, `twine check` PASSED):
 
 ```bash
 # 1. Build from a clean checkout
@@ -62,19 +62,19 @@ twine check dist/*
 
 # 2. Fresh venv, wheel only: no -e, no dev extras
 python -m venv /tmp/ef-clean-venv
-/tmp/ef-clean-venv/bin/python -m pip install dist/eventflow-0.1.0-py3-none-any.whl
+/tmp/ef-clean-venv/bin/python -m pip install dist/shikong-0.1.0-py3-none-any.whl
 
 # 3. CLI works from the installed package
-/tmp/ef-clean-venv/bin/eventflow --help        # lists run/validate/version/...
-/tmp/ef-clean-venv/bin/eventflow version        # eventflow version 0.1.0
+/tmp/ef-clean-venv/bin/shikong --help        # lists run/validate/version/...
+/tmp/ef-clean-venv/bin/shikong version        # shikong version 0.1.0
 
 # 4. The shipped recipe config validates (21 steps)
-/tmp/ef-clean-venv/bin/eventflow validate --config configs/recipes/chicago_crime_v1.yaml
+/tmp/ef-clean-venv/bin/shikong validate --config configs/recipes/chicago_crime_v1.yaml
 # ✓ Valid recipe configuration: ... (pipeline builds: 21 steps)
 
 # 5. End-to-end smoke: the example above, plus the real CLI run path
 /tmp/ef-clean-venv/bin/python examples/chicago_quickstart.py
-/tmp/ef-clean-venv/bin/eventflow run --dataset chicago_crime --recipe chicago_crime_v1 \
+/tmp/ef-clean-venv/bin/shikong run --dataset chicago_crime --recipe chicago_crime_v1 \
     --config configs/recipes/chicago_crime_v1.yaml \
     --input <synthetic csv> --output /tmp/cli_run.parquet
 # Saved 516 cell/time-bin rows to /tmp/cli_run.parquet (62 cols, sum(count) = 120)
@@ -89,7 +89,7 @@ audit (license file reference, placeholder author email removed).
 ### What this proves
 
 - The wheel is self-contained: `pip install` of the wheel alone
-  yields a working `eventflow` command and importable package.
+  yields a working `shikong` command and importable package.
 - The shipped recipe config builds a 21-step pipeline from the
   installed package, and the full recipe runs end to end on
   synthetic input with the replay invariants holding
@@ -115,13 +115,13 @@ deployment service.
 
 ```bash
 # From the repository root, after `python -m build`:
-docker build -f examples/Dockerfile -t eventflow-examples:0.1.0 .
-docker run --rm eventflow-examples:0.1.0
+docker build -f examples/Dockerfile -t shikong-examples:0.1.0 .
+docker run --rm shikong-examples:0.1.0
 ```
 
 **Status: the Dockerfile was not built in this VM — no Docker
 daemon is available here** (`which docker` finds nothing). The
-equivalent steps (wheel install in a fresh venv, `eventflow --help`,
+equivalent steps (wheel install in a fresh venv, `shikong --help`,
 `validate`, the quick start and the CLI run) were verified in a
 fresh venv instead, as documented above. Build the image on a machine
 with Docker before relying on it, and re-run the example inside it;

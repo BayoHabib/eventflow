@@ -14,12 +14,12 @@ import numpy as np
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.pipeline import Step
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.evaluation.metrics import pai_score, pr_auc_score
-from eventflow.evaluation.splits import validate_split
-from eventflow.evaluation.walkforward import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.pipeline import Step
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.evaluation.metrics import pai_score, pr_auc_score
+from shikong.evaluation.splits import validate_split
+from shikong.evaluation.walkforward import (
     evaluate_walk_forward,
     walk_forward_splits,
 )

@@ -9,9 +9,9 @@ from datetime import datetime, timedelta, timezone
 import polars as pl
 import pytest
 
-from eventflow.core import CadenceRule, EventFrame, EventMetadata, EventSchema, ObservationPanel
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import get_default_registry
+from shikong.core import CadenceRule, EventFrame, EventMetadata, EventSchema, ObservationPanel
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import get_default_registry
 
 T = datetime(2024, 1, 1)
 

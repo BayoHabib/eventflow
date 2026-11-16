@@ -1,10 +1,28 @@
 # Changelog
 
-All notable changes to EventFlow will be documented in this file.
+All notable changes to Shikong will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-EventFlow is pre-1.0: `0.1.0` is an **Alpha** release and the public API
+Shikong is pre-1.0: `0.1.0` is an **Alpha** release and the public API
 may still change.
+
+## [Unreleased]
+
+### Changed
+
+- **Renamed: EventFlow → Shikong (时空, shíkōng, "space-time").** The PyPI
+  distribution name `eventflow` has been taken since 2017 (unrelated
+  pre-releases, no description), the import package `eventflow` is also
+  installed by `flowevent` on PyPI, and the name collides with the academic
+  EventFlow visualization tool (HCIL Maryland, Monroe et al. 2013) and the
+  .NET EventFlow framework. Package `src/eventflow/` → `src/shikong/`,
+  all imports, the `shikong` console script, and docs updated. This is a
+  clean break with **no compatibility shim**: version 0.1.0 Alpha was never
+  published on PyPI and has no users. The GitHub repository itself is
+  still named `BayoHabib/eventflow` for now (renamed separately after this
+  lands); GitHub redirects the old repository URLs, so existing links keep
+  working. Includes the evaluation guardrail from PR #53 (reject nullable
+  split columns; accept DataFrames).
 
 ## [0.1.0] - 2026-11-15
 
@@ -24,7 +42,7 @@ stated instead of smoothed over.
   Raster `(T, C, H, W)`, Graph (nodes + edges), Stream (continuous
   timestamps).
 - Chicago crime dataset adapter and `chicago_crime_v1` recipe; CLI
-  (`eventflow run / validate / list-datasets / list-recipes / version`).
+  (`shikong run / validate / list-datasets / list-recipes / version`).
 - Executable README Quick Start examples, covered by
   `tests/test_readme_examples.py`.
 - `make audit` (ruff, black, mypy, pytest, Chicago replay) — PASS 5/5.
@@ -108,7 +126,7 @@ stated instead of smoothed over.
 ### Added — Phase 5: library release (unreleased)
 
 - Packaging audited for PyPI: `license` now points at the `LICENSE`
-  file; the placeholder author email `team@eventflow.dev` (not a real
+  file; the placeholder author email `team@shikong.dev` (not a real
   contact address) was removed — the maintainer adds a real contact
   email before the first upload (see `docs/release.md`). Version
   stays `0.1.0`, Development Status Alpha. `python -m build` from a
@@ -116,7 +134,7 @@ stated instead of smoothed over.
   clean. No upload performed.
 - Clean-install verification: the built wheel installs in a fresh
   venv (runtime dependencies only, no `-e`, no dev extras) and
-  `eventflow --help`, `eventflow version`, `eventflow validate` on the
+  `shikong --help`, `shikong version`, `shikong validate` on the
   shipped Chicago recipe config (21 steps) and the end-to-end smoke
   example all pass there (see `examples/README.md` for the exact
   commands and outputs).

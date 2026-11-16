@@ -1,10 +1,10 @@
-# EventFlow TODO List
+# Shikong TODO List
 
 > Production Readiness Checklist & Improvements
 
 ## 🗺️ Roadmap (phases 0–5)
 
-> Scope (decided 2026-11-15): EventFlow is a generic spatio-temporal
+> Scope (decided 2026-11-15): Shikong is a generic spatio-temporal
 > preprocessing library; Chicago crime is one use case. The target taxonomy
 > includes point events,
 > trajectories, time series on fixed locations (sensors), evolving
@@ -264,7 +264,7 @@ trained models are optional downstream applications, with separate scope.
 
 ### Error Handling
 - [ ] Add user-friendly error messages for common mistakes
-- [ ] Create custom exception classes (`EventFlowError`, `AdapterError`, etc.)
+- [ ] Create custom exception classes (`ShikongError`, `AdapterError`, etc.)
 - [ ] Add input validation with clear error messages
 
 ### Documentation
@@ -321,7 +321,7 @@ trained models are optional downstream applications, with separate scope.
 
 ## Optional downstream applications (separate from library release)
 
-These are possible consumers of EventFlow outputs, not required capabilities
+These are possible consumers of Shikong outputs, not required capabilities
 or validated production use cases of the preprocessing library.
 
 - [ ] Model-training examples and baseline models, with their own evaluation

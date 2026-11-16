@@ -43,8 +43,8 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import polars as pl
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
 
 # Default planted parameters. These are the "ground truth" the recovery
 # tests check against; they are constants of the generator, not fitted

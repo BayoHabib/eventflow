@@ -1,6 +1,6 @@
 """Optional numerical oracle: pip install esda; python scripts/check_spatial_reference.py.
 
-PySAL is a development oracle, not an EventFlow runtime dependency. The regular
+PySAL is a development oracle, not an Shikong runtime dependency. The regular
 test suite also checks hand-computed fixtures without this optional installation.
 """
 
@@ -11,9 +11,9 @@ import libpysal
 import numpy as np
 import polars as pl
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema
-from eventflow.core.steps.spatial import GetisOrdStep, LocalMoranStep
-from eventflow.core.weights import SpatialWeights
+from shikong.core import EventFrame, EventMetadata, EventSchema
+from shikong.core.steps.spatial import GetisOrdStep, LocalMoranStep
+from shikong.core.weights import SpatialWeights
 
 
 def check() -> None:
@@ -51,7 +51,7 @@ def check() -> None:
         reference_i = esda.Moran_Local(
             np.array(values), libpysal.weights.W(neighbors), permutations=0
         ).Is
-        # PySAL divides by n-1. EventFlow uses the n convention (spdep mlvar=True).
+        # PySAL divides by n-1. Shikong uses the n convention (spdep mlvar=True).
         np.testing.assert_allclose(actual_i, reference_i * n / (n - 1), rtol=1e-12)
         actual_g = (
             GetisOrdStep("value", spatial_weights=weights)
