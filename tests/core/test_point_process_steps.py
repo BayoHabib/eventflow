@@ -7,10 +7,10 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from eventflow.core.domain import SpatialDomain
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.point_process import (
+from shikong.core.domain import SpatialDomain
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.point_process import (
     ConditionalIntensityStep,
     ContinuousInterEventStep,
     DurationFeaturesStep,

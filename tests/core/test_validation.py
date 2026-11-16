@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.validation import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.validation import (
     ValidationReport,
     ValidationResult,
     validate_hawkes_features,

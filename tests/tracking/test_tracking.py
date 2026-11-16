@@ -12,10 +12,10 @@ import pytest
 
 
 def test_import_tracking_does_not_require_mlflow() -> None:
-    """Importing eventflow.tracking works without mlflow installed."""
+    """Importing shikong.tracking works without mlflow installed."""
     pytest.importorskip("polars")  # the package itself needs polars
-    import eventflow.tracking  # noqa: F401
-    from eventflow.tracking import TrackerProtocol  # noqa: F401
+    import shikong.tracking  # noqa: F401
+    from shikong.tracking import TrackerProtocol  # noqa: F401
 
 
 def test_mlflow_tracker_requires_mlflow_installed() -> None:
@@ -24,7 +24,7 @@ def test_mlflow_tracker_requires_mlflow_installed() -> None:
     try:
         import mlflow  # noqa: F401
     except ImportError:
-        from eventflow.tracking.mlflow_tracker import MLflowTracker
+        from shikong.tracking.mlflow_tracker import MLflowTracker
 
         with pytest.raises(ImportError, match="MLflow is not installed"):
             MLflowTracker()

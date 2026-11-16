@@ -54,10 +54,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from eventflow.core.steps.categorical import CategoryCountsStep
-from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep
-from eventflow.core.steps.temporal import (
+from shikong.core.steps.categorical import CategoryCountsStep
+from shikong.core.steps.panel import CompletePanelStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep
+from shikong.core.steps.temporal import (
     CalendarEncodingStep,
     FillNullStep,
     MovingAverageStep,

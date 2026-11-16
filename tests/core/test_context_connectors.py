@@ -19,9 +19,9 @@ import polars as pl
 import pytest
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema
-from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
-from eventflow.core.steps.context import (
+from shikong.core import EventFrame, EventMetadata, EventSchema
+from shikong.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from shikong.core.steps.context import (
     SpatialContextJoinStep,
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,

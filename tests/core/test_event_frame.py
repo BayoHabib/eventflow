@@ -3,8 +3,8 @@
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import (
     ContextRequirementState,
     EventMetadata,
     EventSchema,

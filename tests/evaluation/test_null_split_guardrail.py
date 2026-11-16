@@ -18,9 +18,9 @@ import datetime as dt
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.evaluation.splits import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.evaluation.splits import (
     blocked_split,
     entity_split,
     partition_units,
@@ -28,7 +28,7 @@ from eventflow.evaluation.splits import (
     temporal_split,
     validate_split,
 )
-from eventflow.evaluation.walkforward import evaluate_walk_forward, walk_forward_splits
+from shikong.evaluation.walkforward import evaluate_walk_forward, walk_forward_splits
 
 
 def _nullable_frame() -> pl.LazyFrame:

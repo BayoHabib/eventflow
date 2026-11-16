@@ -6,17 +6,17 @@ import polars as pl
 import pytest
 from pydantic import BaseModel
 
-from eventflow.core.context.sources import BaseContextSource
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.output_adapters import BaseOutputAdapter
-from eventflow.core.pipeline import Pipeline, Step
-from eventflow.core.registry import (
+from shikong.core.context.sources import BaseContextSource
+from shikong.core.event_frame import EventFrame
+from shikong.core.output_adapters import BaseOutputAdapter
+from shikong.core.pipeline import Pipeline, Step
+from shikong.core.registry import (
     ContextSourceRegistry,
     FeatureStepRegistry,
     OutputAdapterRegistry,
 )
-from eventflow.core.schema import ContextSchema, EventMetadata, EventSchema, RecipeConfig
-from eventflow.recipes.base import BaseRecipe
+from shikong.core.schema import ContextSchema, EventMetadata, EventSchema, RecipeConfig
+from shikong.recipes.base import BaseRecipe
 
 
 class DummyStep(Step):

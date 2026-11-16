@@ -5,9 +5,9 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.pipeline import Pipeline, Step
-from eventflow.core.schema import EventMetadata, EventSchema, FeatureProvenance
+from shikong.core.event_frame import EventFrame
+from shikong.core.pipeline import Pipeline, Step
+from shikong.core.schema import EventMetadata, EventSchema, FeatureProvenance
 
 
 @pytest.fixture()

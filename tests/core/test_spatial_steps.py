@@ -6,9 +6,9 @@ import polars as pl
 import pytest
 from shapely import geometry
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.spatial import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.spatial import (
     AssignToGridStep,
     AssignToZonesStep,
     ComputeDistancesStep,

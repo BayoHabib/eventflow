@@ -15,7 +15,7 @@ from pathlib import Path
 
 import polars as pl
 
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     GraphAdapter,
     GraphAdapterConfig,
     RasterAdapter,
@@ -130,7 +130,7 @@ def test_readme_stream_adapter() -> None:
 
 def test_readme_pipeline_steps_imports() -> None:
     """Every Step class named in the README Pipeline section must exist."""
-    from eventflow.core.steps import (  # noqa: F401
+    from shikong.core.steps import (  # noqa: F401
         AssignToGridStep,
         AssignToZonesStep,
         BurstinessStep,
@@ -163,14 +163,14 @@ def test_readme_pipeline_steps_imports() -> None:
         TrendStep,
         ZeroFeaturesStep,
     )
-    from eventflow.core.steps.density import (  # noqa: F401
+    from shikong.core.steps.density import (  # noqa: F401
         KernelDensityStep,
         SpaceTimeKernelDensityStep,
     )
-    from eventflow.core.steps.hawkes import HawkesExcitationStep  # noqa: F401
-    from eventflow.core.steps.near_repeat import NearRepeatStep  # noqa: F401
-    from eventflow.core.steps.spatial import MultiScaleSpatialLagStep  # noqa: F401
-    from eventflow.core.steps.validation import (  # noqa: F401
+    from shikong.core.steps.hawkes import HawkesExcitationStep  # noqa: F401
+    from shikong.core.steps.near_repeat import NearRepeatStep  # noqa: F401
+    from shikong.core.steps.spatial import MultiScaleSpatialLagStep  # noqa: F401
+    from shikong.core.steps.validation import (  # noqa: F401
         validate_point_process_features,
         validate_temporal_ordering,
     )
@@ -220,7 +220,7 @@ def test_readme_has_no_stale_test_counts() -> None:
 def test_readme_does_not_claim_phase1_features_missing() -> None:
     """Phases 1-2 delivered the features the old README said were missing."""
     text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    section = text.split("## What EventFlow does not do")[1].split("## Installation")[0]
+    section = text.split("## What Shikong does not do")[1].split("## Installation")[0]
     assert "No per-category or rolling-window features yet" not in section
     assert "No zero-count pairs in the Chicago output" not in section
     assert "zero-count pairs require a separate completion step" not in text

@@ -9,15 +9,15 @@ import yaml
 from shapely.geometry import Polygon, box
 from typer.testing import CliRunner
 
-from eventflow.core import (
+from shikong.core import (
     EventFrame,
     EventMetadata,
     EventSchema,
     SpatialDomain,
     annotate_grid_coverage,
 )
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.steps import GridDomainCoverageStep, SpatialDomainMaskStep, get_default_registry
+from shikong.core.pipeline import Pipeline
+from shikong.core.steps import GridDomainCoverageStep, SpatialDomainMaskStep, get_default_registry
 
 
 @pytest.fixture
@@ -265,7 +265,7 @@ def test_coverage_enrichment_preserves_input_order(
 
 
 def test_generic_steps_are_discoverable_from_cli(monkeypatch: pytest.MonkeyPatch) -> None:
-    import eventflow.cli.main as cli
+    import shikong.cli.main as cli
 
     monkeypatch.setattr(cli, "_step_registry", None)
     result = CliRunner().invoke(cli.app, ["list-steps", "--tag", "spatial"])

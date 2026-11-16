@@ -1,6 +1,6 @@
 """Tests for EventMetadata extensions."""
 
-from eventflow.core.schema import EventMetadata
+from shikong.core.schema import EventMetadata
 
 
 def test_event_metadata_defaults() -> None:

@@ -4,7 +4,7 @@ Each example is run as a program (``python examples/<name>.py``) so the
 test proves what a user gets, not just what the library does in-process.
 The subprocess inherits a ``PYTHONPATH`` pointing at this checkout's
 ``src/`` so the example runs against the code under test, never against
-whatever ``eventflow`` happens to be installed in the environment.
+whatever ``shikong`` happens to be installed in the environment.
 """
 
 from __future__ import annotations

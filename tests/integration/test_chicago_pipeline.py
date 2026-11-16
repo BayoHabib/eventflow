@@ -12,14 +12,14 @@ import yaml
 from pyproj import Transformer
 from typer.testing import CliRunner
 
-from eventflow.cli.main import app
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import DatasetConfig, EventMetadata, EventSchema, RecipeConfig
-from eventflow.core.spatial import assign_to_grid, assign_to_zones, create_grid, transform_crs
-from eventflow.core.steps.spatial import AssignToGridStep, AssignToZonesStep, TransformCRSStep
-from eventflow.core.temporal import extract_temporal_components
-from eventflow.datasets.chicago_crime.mapping import clean_chicago_data, load_chicago_crime
-from eventflow.recipes.registry import get_recipe, list_datasets
+from shikong.cli.main import app
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import DatasetConfig, EventMetadata, EventSchema, RecipeConfig
+from shikong.core.spatial import assign_to_grid, assign_to_zones, create_grid, transform_crs
+from shikong.core.steps.spatial import AssignToGridStep, AssignToZonesStep, TransformCRSStep
+from shikong.core.temporal import extract_temporal_components
+from shikong.datasets.chicago_crime.mapping import clean_chicago_data, load_chicago_crime
+from shikong.recipes.registry import get_recipe, list_datasets
 
 
 @pytest.fixture
@@ -252,8 +252,8 @@ def test_phase2_time_steps_use_populated_timestamp_column() -> None:
     timestamp column into both steps (and the steps themselves now
     reject a null time column, see their validation tests).
     """
-    from eventflow.core.steps.density import SpaceTimeKernelDensityStep
-    from eventflow.core.steps.near_repeat import NearRepeatStep
+    from shikong.core.steps.density import SpaceTimeKernelDensityStep
+    from shikong.core.steps.near_repeat import NearRepeatStep
 
     repo_root = Path(__file__).resolve().parents[2]
     config_path = repo_root / "configs" / "recipes" / "chicago_crime_v1.yaml"
@@ -470,7 +470,7 @@ def test_legacy_extract_produces_all_supported_components() -> None:
 
 
 def test_recipe_preserves_support_for_queen_lag():
-    from eventflow.core.steps.spatial import SpatialLagStep
+    from shikong.core.steps.spatial import SpatialLagStep
 
     x, y = Transformer.from_crs("EPSG:26971", "EPSG:4326", always_xy=True).transform(
         [350050.0, 350050.0, 350550.0], [570050.0] * 3

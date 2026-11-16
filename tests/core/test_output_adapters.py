@@ -14,7 +14,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     GraphAdapter,
     GraphAdapterConfig,
     GraphOutput,
@@ -34,8 +34,8 @@ from eventflow.core.adapters import (
     get_default_adapter_registry,
     register_builtin_adapters,
 )
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
 
 if TYPE_CHECKING:
     pass
@@ -757,7 +757,7 @@ _DRIVER = """
 import sys
 from pathlib import Path
 
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     GraphAdapter,
     GraphAdapterConfig,
     SerializationFormat,
@@ -889,7 +889,7 @@ class TestAdapterRegistry:
 
     def test_register_builtin_adapters(self) -> None:
         """Test that all built-in adapters can be registered."""
-        from eventflow.core.registry import OutputAdapterRegistry
+        from shikong.core.registry import OutputAdapterRegistry
 
         registry = OutputAdapterRegistry()
         register_builtin_adapters(registry)

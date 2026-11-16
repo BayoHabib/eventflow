@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from eventflow.core.schema import RecipeConfig
-from eventflow.recipes.registry import get_recipe, list_datasets
+from shikong.core.schema import RecipeConfig
+from shikong.recipes.registry import get_recipe, list_datasets
 
 CONFIGS = Path(__file__).resolve().parents[2] / "configs" / "recipes"
 

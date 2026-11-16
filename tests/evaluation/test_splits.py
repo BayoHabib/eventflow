@@ -7,9 +7,9 @@ import datetime as dt
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.evaluation.splits import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.evaluation.splits import (
     blocked_split,
     entity_split,
     partition_units,

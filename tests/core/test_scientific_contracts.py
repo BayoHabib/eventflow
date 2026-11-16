@@ -10,26 +10,26 @@ import polars as pl
 import pytest
 from shapely.geometry import box
 
-from eventflow.core import EventFrame, EventMetadata, EventSchema
-from eventflow.core._time import duration_seconds
-from eventflow.core.context.joiners import TemporalJoin
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.schema import ContextSchema
-from eventflow.core.steps.context import (
+from shikong.core import EventFrame, EventMetadata, EventSchema
+from shikong.core._time import duration_seconds
+from shikong.core.context.joiners import TemporalJoin
+from shikong.core.pipeline import Pipeline
+from shikong.core.schema import ContextSchema
+from shikong.core.steps.context import (
     SpatialContextJoinStep,
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,
 )
-from eventflow.core.steps.point_process import HawkesKernelStep
-from eventflow.core.steps.spatial import (
+from shikong.core.steps.point_process import HawkesKernelStep
+from shikong.core.steps.spatial import (
     GetisOrdStep,
     LocalMoranStep,
     SpatialLagStep,
     TransformCRSStep,
 )
-from eventflow.core.steps.temporal import MovingAverageStep, TemporalLagStep
-from eventflow.core.temporal import align_temporal
-from eventflow.core.weights import SpatialWeights
+from shikong.core.steps.temporal import MovingAverageStep, TemporalLagStep
+from shikong.core.temporal import align_temporal
+from shikong.core.weights import SpatialWeights
 
 
 def frame(data: dict, crs: str = "EPSG:3857") -> EventFrame:

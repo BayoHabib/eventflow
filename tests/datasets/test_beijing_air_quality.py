@@ -22,16 +22,16 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, RecipeConfig
-from eventflow.datasets.beijing_air_quality.mapping import (
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, RecipeConfig
+from shikong.datasets.beijing_air_quality.mapping import (
     clean_beijing_data,
     load_beijing_air_quality,
 )
-from eventflow.datasets.beijing_air_quality.recipes.beijing_air_quality_v1 import (
+from shikong.datasets.beijing_air_quality.recipes.beijing_air_quality_v1 import (
     BeijingAirQualityV1Recipe,
 )
-from eventflow.datasets.beijing_air_quality.schema import (
+from shikong.datasets.beijing_air_quality.schema import (
     BEIJING_AIR_QUALITY_SCHEMA,
     MEASUREMENT_COLS,
     STATION_COORDS,

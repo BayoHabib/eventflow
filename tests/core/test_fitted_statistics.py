@@ -15,19 +15,19 @@ from pathlib import Path
 
 import yaml
 
-from eventflow.core.pipeline import FittableStep, Step
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.steps.categorical import CategoryCountsStep
-from eventflow.core.steps.registration import get_default_registry
-from eventflow.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCountStep
-from eventflow.recipes.registry import get_recipe
+from shikong.core.pipeline import FittableStep, Step
+from shikong.core.schema import RecipeConfig
+from shikong.core.steps.categorical import CategoryCountsStep
+from shikong.core.steps.registration import get_default_registry
+from shikong.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCountStep
+from shikong.recipes.registry import get_recipe
 
 CONFIGS = Path(__file__).resolve().parents[2] / "configs" / "recipes"
 
 
 def _all_step_classes() -> set[type[Step]]:
     """Every Step subclass reachable from the steps package and recipes."""
-    import eventflow.core.steps  # noqa: F401 — imports every step module
+    import shikong.core.steps  # noqa: F401 — imports every step module
 
     seen: set[type[Step]] = set()
     queue: list[type[Step]] = [Step]

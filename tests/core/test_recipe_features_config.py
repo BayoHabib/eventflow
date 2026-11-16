@@ -18,8 +18,8 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from eventflow.core.schema import FeatureConfig, RecipeConfig
-from eventflow.recipes.registry import get_recipe
+from shikong.core.schema import FeatureConfig, RecipeConfig
+from shikong.recipes.registry import get_recipe
 
 
 def _base_recipe_kwargs() -> dict:
@@ -145,7 +145,7 @@ def test_get_pipeline_rejects_unknown_configured_step() -> None:
     run()/run_async() will execute must fail here for an unknown step
     instead of falling back to the recipe's built-in pipeline.
     """
-    from eventflow.core.steps import get_default_registry
+    from shikong.core.steps import get_default_registry
 
     config = RecipeConfig(**_base_recipe_kwargs(), features={"steps": ["not_a_real_step"]})
     recipe = get_recipe(

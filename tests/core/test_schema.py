@@ -2,7 +2,7 @@
 
 import pytest
 
-from eventflow.core.schema import ContextSchema, EventMetadata, EventSchema
+from shikong.core.schema import ContextSchema, EventMetadata, EventSchema
 
 
 def test_event_schema_with_latlon() -> None:
