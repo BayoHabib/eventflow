@@ -180,20 +180,28 @@ rows × 90 columns, sum `count` = 60,235); traceability unchanged
   enrichment still needs an overlapping 2007–2009 weather source, none
   fabricated.
 
-### Phase 4 — Extended anti-leakage evaluation
+### Phase 4 — Extended anti-leakage evaluation ✅ DONE (2026-11-15)
 
-Build on the per-feature availability checks required from Phase 1.
+Delivered (PR #46, merged 2026-11-15): blocked splits (disjoint time
+intervals, unit sets and entity IDs; optional embargo gap) with
+`validate_split` rejecting any overlap; expanding-window walk-forward
+harness with refit per fold; fitted-statistics freeze
+(`CategoryCountsStep.fit/freeze`, proven by test — a held-out slice
+cannot change the fitted vocabulary); synthetic ground truth (lag-1
+corr 0.529 vs 0.6 planted, hotspot top-4 exact) with a planted leak
+detected (leaky random-split PR-AUC 1.0000 vs blocked causal 0.4031);
+downstream PAI/PR-AUC examples on Chicago, labelled explicitly NOT
+acceptance criteria. Target encoding: not applicable — none exists in
+the library, none invented. 991 tests collected (988 passed + 3 skipped
+on CI, 0 failed), coverage 86% (CI run 98, 10/10), `make audit` PASS
+5/5; Chicago/Beijing/GeoLife replays unchanged; traceability unchanged
+(15 attained / 8 partial / 4 not attained / 1 unverifiable).
 
-- [ ] Blocked splits, walk-forward
-- [ ] Out-of-fold target encoding, if introduced; fit only on training folds
-- [ ] Fitted-statistics scoping (carried from Phase 1, 2026-11-15): learn
-  top-N categories, vocabularies, and other fitted statistics from the
-  permitted training/history slice only; freeze them for validation/test
-  and define unseen-category behavior
-- [ ] Optional downstream evaluation examples with task-appropriate metrics
-  (e.g. PAI for hotspot ranking or PR-AUC for classification); these are not
-  universal preprocessing acceptance criteria
-- [ ] Synthetic ground truth
+- [x] Blocked splits, walk-forward
+- [x] Out-of-fold target encoding, if introduced; fit only on training folds — not applicable (no target encoding in the library; none invented)
+- [x] Fitted-statistics scoping (carried from Phase 1, 2026-11-15): `CategoryCountsStep.fit/freeze` — fitted statistics learned from the permitted training slice only, frozen for validation/test; unseen-category behavior defined
+- [x] Optional downstream evaluation examples with task-appropriate metrics (PAI for hotspot ranking, PR-AUC for classification) — examples only, not universal preprocessing acceptance criteria
+- [x] Synthetic ground truth
 
 ### Phase 5 — Library release
 
@@ -310,4 +318,4 @@ or validated production use cases of the preprocessing library.
 
 ---
 
-*Last updated: November 15, 2026 (phase 3 DONE — PR #44 merged, 916 tests, 85%; Beijing second domain + GeoLife boundary statement + TabularFileSource; irregular sampling not covered)*
+*Last updated: November 15, 2026 (phase 4 DONE — PR #46 merged, 991 tests, 86%; blocked splits + walk-forward + fitted-statistics freeze + synthetic ground truth; target encoding N/A)*
