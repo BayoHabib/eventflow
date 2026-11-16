@@ -130,11 +130,29 @@ stated instead of smoothed over.
   examples-only image (not a prediction API, not a deployment
   service); it was **not built in this VM** (no Docker available) —
   the equivalent steps were verified in a fresh venv instead.
-- This changelog and the release procedure in `docs/release.md`.
-- Further Phase 5 items (output-adapter aliases, the adapter naming
-  decision, API documentation coverage) are tracked in
-  `docs/design-notes/phase5-exit-criteria.md` and are not claimed
-  here.
+- Output-adapter aliases (backwards compatible, old names keep working):
+  `SequenceOutput.attention_mask`, `StreamOutput.inter_event_times`,
+  `StreamOutput.state_features` — read-only properties returning the
+  identical array object; serialization carries both keys and
+  deserializers accept either, so pre-Phase 5 files still load. Uniform
+  `.data` accessor on all five outputs. `feature_names` is the canonical
+  name vocabulary. Decisions recorded in
+  `docs/design-notes/phase5-adapter-naming.md`; proven by
+  `tests/core/test_adapter_aliases.py` (21 tests).
+- Documentation completed for Phases 1–4: `docs/api_reference.md`
+  rewritten (panel, dynamics, categorical + fit/freeze, spatial v2,
+  evaluation, connectors, Beijing/GeoLife recipes); every code example
+  is executed by `tests/test_docs_examples.py` (32 tests). README,
+  GETTING_STARTED, datasets and architecture corrected. The demo
+  notebook was executed, fails (it reads monthly CSVs from a path that
+  does not exist here), and is marked UNVERIFIED — its figures are
+  presented nowhere as facts.
+- **Measured:** 1,046 tests collected, 1,046 passed, 0 failed,
+  2 skipped; coverage 86% (6,982 statements, 979 missed).
+  `make audit` PASS 5/5; Chicago replay unchanged (1,908,088 rows ×
+  90 columns, sum `count` = 60,235); Beijing and GeoLife replays
+  unchanged. Traceability counter: 16 attained / 10 partial /
+  1 not attained / 1 unverifiable.
 
 ### Fixed — Phase 5
 
