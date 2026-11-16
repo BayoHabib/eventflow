@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
+from pydantic import ValidationError
 
 from eventflow.core.event_frame import EventFrame
+from eventflow.core.registry import FeatureStepRegistry
 from eventflow.core.schema import EventMetadata, EventSchema
+from eventflow.core.steps.registration import register_builtin_steps
 from eventflow.core.steps.temporal import (
+    CalendarEncodingConfig,
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
     FillNullStep,
@@ -358,6 +362,30 @@ class TestCalendarEncodingStep:
             CalendarEncodingStep(encoding_type="cyclical", components=["hour", "quater"])
         with pytest.raises(ValueError, match="Supported calendar components"):
             CalendarEncodingStep(encoding_type="cyclical", components=["hour", "quater"])
+
+    def test_rejects_onehot_encoding_type(self, sample_event_frame: EventFrame) -> None:
+        """'onehot' is deliberately unsupported and must fail at construction (issue #41)."""
+        with pytest.raises(ValueError, match="onehot"):
+            CalendarEncodingStep(encoding_type="onehot", components=["hour"])
+        with pytest.raises(ValueError, match="Supported calendar encoding types"):
+            CalendarEncodingStep(encoding_type="onehot", components=["hour"])
+
+    def test_rejects_unknown_encoding_type(self, sample_event_frame: EventFrame) -> None:
+        """An arbitrary encoding type must fail at construction, not be a silent no-op (issue #41)."""
+        with pytest.raises(ValueError, match="bogus"):
+            CalendarEncodingStep(encoding_type="bogus", components=["hour"])
+
+    def test_rejects_onehot_encoding_type_via_config(self) -> None:
+        """The registry/config path must reject 'onehot' too (issue #41)."""
+        with pytest.raises(ValidationError, match="onehot"):
+            CalendarEncodingConfig(encoding_type="onehot")
+
+    def test_rejects_onehot_encoding_type_via_registry(self) -> None:
+        """registry.create must reject 'onehot' before any step is built (issue #41)."""
+        registry = FeatureStepRegistry()
+        register_builtin_steps(registry)
+        with pytest.raises(ValidationError, match="onehot"):
+            registry.create("calendar_encoding", params={"encoding_type": "onehot"})
 
     def test_cyclical_day_of_month_and_week_of_year_encoding(
         self, sample_event_frame: EventFrame

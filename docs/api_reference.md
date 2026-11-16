@@ -294,12 +294,11 @@ class CalendarEncodingStep(Step):
 ```
 
 Cyclical (`sin`/`cos` per component) or ordinal encoding of calendar
-components. Unknown *components* raise `ValueError` at construction.
-
-> **Known limitation (issue #41, still open):** `encoding_type="onehot"`
-> — and any other unknown encoding type — is accepted by the
-> constructor but produces **no columns at all**, silently. Only
-> `"cyclical"` and `"ordinal"` produce output. Do not use `"onehot"`.
+components. Unknown *components* and unknown *encoding types* raise
+`ValueError` at construction (issues #33 and #41). One-hot encoding
+is deliberately not supported — it expands columns significantly and
+is better done at model training time — so `encoding_type="onehot"`
+is rejected, not silently ignored.
 
 #### FillNullStep
 

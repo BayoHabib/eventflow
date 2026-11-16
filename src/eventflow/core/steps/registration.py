@@ -317,7 +317,7 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         "calendar_encoding",
         CalendarEncodingStep,
         tags=["temporal"],
-        description="Encode calendar features (cyclical, one-hot, ordinal)",
+        description="Encode calendar features (cyclical, ordinal)",
         config_model=CalendarEncodingConfig,
     )
 
