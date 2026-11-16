@@ -230,10 +230,39 @@ class CompletePanelStep(Step):
                     )
                 value_cols.append(name)
 
-        # Validate on the (unit, time) keys only; the full frame stays lazy
-        # until the joins below.
-        keys = lf.select([unit_col, time_col]).collect()
-        if keys.height == 0:
+        # Validate on the (unit, time) keys only, with small-result
+        # aggregations: no key column is ever materialized and the full
+        # frame stays lazy until the joins below (issue #39). The checks
+        # below fire in the same order, with the same messages, as when
+        # they ran on a collected key frame. The off-grid expression is
+        # only added when the time column is Datetime (known from the
+        # schema, no data read): on any other dtype the fused query would
+        # fail inside ``.dt`` before the dtype check below could raise
+        # its ValueError.
+        bin_micros = round(bin_seconds * 1_000_000)
+        stat_exprs = [
+            pl.len().alias("_n_rows"),
+            pl.col(unit_col).null_count().alias("_unit_nulls"),
+            pl.col(time_col).null_count().alias("_time_nulls"),
+            pl.col(time_col).min().alias("_min_time"),
+            pl.col(time_col).max().alias("_max_time"),
+            pl.struct([unit_col, time_col]).is_duplicated().any().alias("_has_duplicates"),
+        ]
+        if isinstance(schema[time_col], pl.Datetime):
+            # Every observed bin must lie on the regular grid anchored at
+            # the earliest bin; otherwise the time axis below would
+            # silently drop the off-grid rows in the join. The earliest
+            # bin is the column minimum, broadcast into the same row.
+            stat_exprs.append(
+                (
+                    (pl.col(time_col) - pl.col(time_col).min()).dt.total_microseconds() % bin_micros
+                    != 0
+                )
+                .any()
+                .alias("_has_off_grid")
+            )
+        key_stats = lf.select(stat_exprs).collect().row(0, named=True)
+        if key_stats["_n_rows"] == 0:
             raise ValueError("Cannot complete an empty frame: no units or time bins observed")
         # An empty frame infers Null dtypes, so dtype checks only make
         # sense once rows exist.
@@ -249,37 +278,31 @@ class CompletePanelStep(Step):
                 raise ValueError(
                     f"Measure column {measure_col!r} must be numeric, got {schema[measure_col]}"
                 )
-        if keys[unit_col].null_count() or keys[time_col].null_count():
+        if key_stats["_unit_nulls"] or key_stats["_time_nulls"]:
             raise ValueError("Unit and time columns cannot contain nulls")
-        if keys.is_duplicated().any():
+        if key_stats["_has_duplicates"]:
             raise ValueError(
                 "Duplicate (unit, time) pairs in the input: aggregate to one row per "
                 "(unit, time) pair before completing the panel"
             )
-
-        time_dtype = schema[time_col]
-        assert isinstance(time_dtype, pl.Datetime)
-        min_time = keys[time_col].min()
-        max_time = keys[time_col].max()
-        assert isinstance(min_time, datetime) and isinstance(max_time, datetime)
-
-        # Every observed bin must lie on the regular grid anchored at the
-        # earliest bin; otherwise the time axis below would silently drop
-        # the off-grid rows in the join.
-        bin_micros = round(bin_seconds * 1_000_000)
-        offsets = keys.select(
-            (pl.col(time_col) - min_time).dt.total_microseconds().alias("_offset_us")
-        )
-        if (offsets["_offset_us"] % bin_micros != 0).any():
+        if key_stats["_has_off_grid"]:
             raise ValueError(
                 f"Time column {time_col!r} has bins that are not aligned to {bin_size!r} "
-                f"from the earliest bin {min_time}; bin the timestamps first "
+                f"from the earliest bin {key_stats['_min_time']}; bin the timestamps first "
                 "(for example with TimeBinsStep)"
             )
 
+        time_dtype = schema[time_col]
+        assert isinstance(time_dtype, pl.Datetime)
+        min_time = key_stats["_min_time"]
+        max_time = key_stats["_max_time"]
+        assert isinstance(min_time, datetime) and isinstance(max_time, datetime)
+
         # Units enter the panel only if observed in enough distinct bins.
-        unit_counts = keys.group_by(unit_col).agg(pl.col(time_col).n_unique().alias("_n_bins"))
-        kept = unit_counts.filter(pl.col("_n_bins") >= self.min_periods)
+        # One row per unit is collected: the per-unit bin counts, not the
+        # key columns (issue #39).
+        unit_counts = lf.group_by(unit_col).agg(pl.col(time_col).n_unique().alias("_n_bins"))
+        kept = unit_counts.filter(pl.col("_n_bins") >= self.min_periods).collect()
         if kept.height == 0:
             raise ValueError(
                 f"No spatial unit was observed in at least {self.min_periods} distinct "
@@ -302,13 +325,16 @@ class CompletePanelStep(Step):
         static_cols: list[str] = []
         varying_cols: list[str] = []
         if other_cols:
-            other_data = lf.select([unit_col, *other_cols]).collect()
             # n_unique counts null as one distinct value, so a column that
-            # is null everywhere still passes as constant.
+            # is null everywhere still passes as constant. The aggregation
+            # returns one row per unit, so the other columns are never
+            # materialized in full (issue #39).
             varying = (
-                other_data.group_by(unit_col)
+                lf.select([unit_col, *other_cols])
+                .group_by(unit_col)
                 .agg([pl.col(c).n_unique().alias(c) for c in other_cols])
                 .select([pl.col(c).max().alias(c) for c in other_cols])
+                .collect()
                 .row(0, named=True)
             )
             for c in other_cols:
