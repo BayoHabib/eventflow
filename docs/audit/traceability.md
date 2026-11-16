@@ -317,3 +317,40 @@ quick start 120 événements → 516 lignes, somme `count` = 120).
 objectifs 23 et 24 (non atteints → partiels). Le seul objectif non
 atteint restant est le service FastAPI (objectif 22), hors périmètre
 par décision du mainteneur.
+
+## After STPP emitters
+
+**Measured 2026-11-16** (independent verification of the real emitted
+files: `audit/stpp-emitters/verification.log` and
+`verification.json` — 395 checks, 0 failures). Full pytest suite:
+1,109 passed, 2 skipped (baseline 1,069 + 2 skipped, plus 40 new
+tests in `tests/stpp/test_emitters.py`), coverage 86 %; new module
+`src/shikong/stpp/emitters.py` at 100 % line coverage. `make audit`
+VERDICT PASS, exit 0 (5/5: ruff, black, mypy, pytest, replay;
+evidence pack `audit/phase-1/`); Chicago replay unchanged
+(1,908,088 rows × 90 columns, sum `count` = 60,235).
+
+- **STPP emitters (new increment, no objective number — first step of
+  the STPP direction decided 2026-11-16).** Exact-event emitters only:
+  Gatech/THP/EasyTPP pickles + JSON, EarthquakeNPP-style catalog CSVs
+  (+ `(t, x, y)` float64 arrays) and tick pickles, one sequence per
+  split, chronological splits with a 14-day auxiliary period and 2-day
+  embargos chained from `temporal_split`. Chicago Q1 2024 reconciled
+  exactly (aux 8,922 + train 30,464 + dev 8,065 + test 9,915 +
+  embargos 1,435 + 1,434 = 60,235 cleaned of 60,672 raw); GeoLife
+  Phase 3 subset reconciled (aux 1,116 + train 180 + dev 33 + test
+  142 = 1,471 fixes, single mark `fix`, embargo 0 — documented: a
+  2-day embargo would swallow the 49-minute remainder). Independent
+  verification of the real emitted files: 395 checks, 0 failures
+  (Gatech/tick/catalog round-trips with independent readers, x/y vs
+  independent pyproj, Chicago mark counts and first/last timestamps
+  per split vs the raw CSV, byte-identical re-emission).
+  No fitted model anywhere (no λ, no likelihood, no DeepSTPP/AutoSTPP
+  code); compatibility claimed only for the formats read verbatim
+  (Gatech/THP, EarthquakeNPP CSV, tick). Limits stated in
+  `docs/design-notes/stpp-emitters.md`: DeepSTPP/AutoSTPP/SMASH
+  loaders and ETAS catalog columns still unverified (inventory §7);
+  GeoLife dev/test thin by construction (subset of two short
+  trajectories 643 days apart); no magnitude column (crime has none).
+  Emitted data files are NOT committed; they live under
+  `~/workspace/eventflow-eda/stpp-emitters/{chicago,geolife}/`.
