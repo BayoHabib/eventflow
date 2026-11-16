@@ -146,15 +146,39 @@ KDE join).
   joins. Issue #38 is addressed by this PR but not closed — maintainer
   decides. Issues #39 and #41 untouched.
 
-### Phase 3 — Broader genericity proof
+### Phase 3 — Broader genericity proof ✅ DONE (2026-11-15)
 
-- [ ] **Second-domain proof (moved from Phase 1, 2026-11-15):** use real
-  sensor/time-series data with irregular timestamps or gaps; show that
-  missing measurements stay missing, histories stay separated by entity,
-  and applicable Steps work without Chicago-specific assumptions
-- [ ] Add a third real dataset with another representation (e.g. trajectories,
-  areal data, or flows); state what is supported and what remains unsupported
-- [ ] External connectors (POI, weather, rates)
+Delivered (PR #44, merged 2026-11-15): second-domain proof on Beijing
+Multi-Site Air Quality (UCI 501) — 420,768 rows × 64 columns, 12 stations,
+NA PM2.5 identical before/after completion and after the full pipeline
+(8,739 → 8,739), no leakage across stations; third representation on a
+GeoLife GPS subset (1,471 rows, count panel 112 rows) with the
+supported/unsupported boundary statement; generic `TabularFileSource`
+external-table connector (25 tests), demonstrated with an honest negative
+(0/1,471 matched on non-overlapping ranges) and a positive control (8/9).
+Generic fix found by the Beijing proof: `measure_cols` in
+`CompletePanelStep` — measurement columns are never zero-filled. 916 tests
+collected (913 passed + 3 skipped on CI, 0 failed), coverage 85% (CI run
+96, 10/10), `make audit` PASS 5/5; Chicago replay unchanged (1,908,088
+rows × 90 columns, sum `count` = 60,235); traceability unchanged
+(15 attained / 8 partial / 4 not attained / 1 unverifiable).
+
+- [x] **Second-domain proof:** Beijing Multi-Site Air Quality (UCI 501),
+  12 stations, hourly 2013–2017; missing measurements stay missing
+  (NA counts unchanged), histories separated by entity, applicable Steps
+  work without Chicago-specific assumptions. Honest limit: the shipped
+  panel is already complete and timestamps are regular hourly — the
+  proof covers gaps / missing-stays-missing / per-entity separation,
+  not irregular sampling (variant C, Intel Berkeley, not attempted).
+- [x] Third real dataset with another representation (GeoLife GPS
+  trajectories, subset of 1–2 users): supported/unsupported statement
+  written in `docs/design-notes/phase3-geolife-boundary.md` — kinematics,
+  rows-mode lags/rolling, temporal components apply; spatial lag, KDE,
+  near-repeat and Hawkes do not apply to trajectories, with reasons.
+- [x] External connectors: generic `TabularFileSource` (file-backed
+  tabular context join), tested and demonstrated; a production GeoLife
+  enrichment still needs an overlapping 2007–2009 weather source, none
+  fabricated.
 
 ### Phase 4 — Extended anti-leakage evaluation
 
@@ -286,4 +310,4 @@ or validated production use cases of the preprocessing library.
 
 ---
 
-*Last updated: November 15, 2026 (phase 1 DONE — PR #37 merged, 705 tests, 84%; second-domain proof moved from phase 1 to phase 3; fitted-statistics scoping carried to phase 4)*
+*Last updated: November 15, 2026 (phase 3 DONE — PR #44 merged, 916 tests, 85%; Beijing second domain + GeoLife boundary statement + TabularFileSource; irregular sampling not covered)*
