@@ -12,8 +12,25 @@ full design note and the sources each format was read from):
 - EarthquakeNPP-style catalog CSV (one row per event, projected ``x``,
   ``y`` in km) plus a per-split ``(t, x, y)`` NumPy array.
 - tick-style pickle: per-node timestamp lists, one realization per split.
+- Deep-learning STPP formats (see ``docs/design-notes/stpp-dl-data-prep.md``):
+  the DeepSTPP/AutoSTPP shared sliding-window ``.npz`` (keys
+  ``train``/``val``/``test``, lists of ``[t, x, y]`` arrays), the NSTPP
+  windowed ``.npz`` (keys ``YYYYMMDD``, ``[t_days, lon, lat]``), the
+  DSTPP/SMASH pre-split positional pickles, and the DeepSTPP CSV
+  ``[x, y, t]`` file shape.
 """
 
+from shikong.stpp.dl_formats import (
+    NSTPP_STEP_DAYS,
+    NSTPP_WINDOW_DAYS,
+    WRAPPER_SPLITS,
+    emit_deepstpp_csv,
+    emit_dstpp_pickles,
+    emit_nstpp_npz,
+    emit_smash_pickles,
+    emit_wrapper_npz,
+    window_events_nstpp,
+)
 from shikong.stpp.emitters import (
     ChronologicalSplits,
     SplitBoundary,
@@ -31,15 +48,24 @@ from shikong.stpp.emitters import (
 
 __all__ = [
     "ChronologicalSplits",
+    "NSTPP_STEP_DAYS",
+    "NSTPP_WINDOW_DAYS",
     "SplitBoundary",
+    "WRAPPER_SPLITS",
     "build_gatech_sequence",
     "build_manifest",
     "build_tick_payload",
     "chronological_event_splits",
     "emit_catalog",
+    "emit_deepstpp_csv",
+    "emit_dstpp_pickles",
     "emit_gatech",
+    "emit_nstpp_npz",
+    "emit_smash_pickles",
     "emit_tick",
+    "emit_wrapper_npz",
     "events_to_txy",
     "extract_exact_events",
+    "window_events_nstpp",
     "write_manifest",
 ]

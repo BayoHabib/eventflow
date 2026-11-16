@@ -354,3 +354,50 @@ evidence pack `audit/phase-1/`); Chicago replay unchanged
   trajectories 643 days apart); no magnitude column (crime has none).
   Emitted data files are NOT committed; they live under
   `~/workspace/eventflow-eda/stpp-emitters/{chicago,geolife}/`.
+
+## After DL-STPP data preparation
+
+**Measured 2026-11-16** (independent verification of the real emitted
+files: `audit/stpp-dl-data-prep/verification.log` and
+`verification.json` — 61 checks, 0 failures). Full pytest suite:
+1,127 passed, 2 skipped (baseline 1,109 + 2 skipped, plus 18 new
+tests in `tests/stpp/test_dl_formats.py`), coverage 87 %; new module
+`src/shikong/stpp/dl_formats.py` at 100 % line coverage. `make audit`
+VERDICT PASS, exit 0 (5/5: ruff, black, mypy, pytest, replay;
+evidence pack `audit/phase-1/`); Chicago replay unchanged
+(1,908,088 rows × 90 columns, sum `count` = 60,235).
+
+- **DL-STPP data preparation (second STPP increment — data only, no
+  fitted model, no training, no likelihood).** Extends the PR #55
+  emitters with the five neural STPP loaders' formats, each read
+  verbatim before implementation (loader notes in
+  `~/workspace/eventflow-eda/stpp-dl-data-prep/notes/`, zero HTTP 429
+  across three sessions): one shared `.npz` for the DeepSTPP/AutoSTPP
+  `SlidingWindowWrapper` (`train`/`val`/`test`, `[n, 3]` `[t, x, y]`,
+  seconds + projected km, un-normalised — the pre-split scaler fit in
+  DeepSTPP's `DataAdapter`/`synthetic.py` is leakage and is NOT
+  replicated); NSTPP windowed `.npz` (30 d / 7 d step, keys `YYYYMMDD`,
+  `[t_days, lon, lat]` degrees); DSTPP positional `[t, lng, lat]`
+  pickles and SMASH positional `[t, mark, lng, lat]` pickles under
+  `dataset/<name>/`; DeepSTPP `{split}_deepstpp.csv` `[x, y, t]`,
+  `%f`. Chicago Q1 2024 reconciled exactly (same splits as PR #55);
+  GeoLife subset reconciled (1,471). Independent verification of the
+  real emitted files: 61 checks, 0 failures (wrapper values vs PR #55
+  catalog CSVs + independent pyproj, wrapper windowing round-trip,
+  NSTPP windows vs the cleaned event set re-derived from the raw CSV
+  — Chicago 226,676 occurrences, every event in ≥ 1 window; GeoLife
+  92 windows, 87 empty — DSTPP/SMASH values vs catalog CSVs, SMASH
+  log-gaps finite, DeepSTPP CSVs vs catalog + pyproj, byte-identical
+  re-emission). **Honest limit:** the DSTPP reference loader's
+  `assert Min[1] > 0` cannot load these emissions (first gap is 0.0
+  by construction; Chicago has 23,683 tied consecutive pairs across
+  splits, GeoLife 0) — DSTPP compatibility is format-level only; no
+  tie-breaking invented. Inventory §7 for the five DL models is now
+  closed by direct reads; the remaining unverified items (NSTPP
+  `datasets.py`, AutoSTPP ready-`.npz` build, SMASH mark semantics,
+  time units, DSTPP/SMASH pickle contents) stay unverified, never
+  guessed. The inventory's `event_type_num.json` entry for DSTPP was
+  wrong (the file does not exist in that repo) and is corrected in
+  `docs/design-notes/stpp-dl-data-prep.md`. Emitted data files are NOT
+  committed; they live under
+  `~/workspace/eventflow-eda/stpp-dl-data-prep/{chicago,geolife}/`.
