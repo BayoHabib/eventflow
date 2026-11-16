@@ -25,9 +25,9 @@ import polars as pl
 
 from eventflow.core.event_frame import EventFrame
 from eventflow.core.pipeline import Pipeline, Step
-from eventflow.evaluation.splits import FrameLike, validate_split
+from eventflow.evaluation.splits import FrameLike, _require_no_nulls, validate_split
 
-T = TypeVar("T", pl.LazyFrame, EventFrame)
+T = TypeVar("T", pl.LazyFrame, EventFrame, pl.DataFrame)
 
 TimeBound = dt.datetime | dt.date
 
@@ -73,14 +73,27 @@ def _time_range(lazy: pl.LazyFrame, time_col: str) -> tuple[TimeBound, TimeBound
 
 
 def _as_lazy(frame: FrameLike) -> pl.LazyFrame:
-    """Return the underlying LazyFrame of *frame*."""
-    return frame.lazy_frame if isinstance(frame, EventFrame) else frame
+    """Return the underlying LazyFrame of *frame*.
+
+    A collected DataFrame is converted with ``.lazy()`` (cheap, no data
+    copy); anything else raises a clear TypeError instead of failing
+    later with a cryptic AttributeError.
+    """
+    if isinstance(frame, EventFrame):
+        return frame.lazy_frame
+    if isinstance(frame, pl.DataFrame):
+        return frame.lazy()
+    if isinstance(frame, pl.LazyFrame):
+        return frame
+    raise TypeError("expected a LazyFrame, EventFrame or DataFrame, " f"got {type(frame).__name__}")
 
 
 def _reattach(frame: T, lazy: pl.LazyFrame) -> T:
     """Wrap *lazy* in the same container type *frame* came in."""
     if isinstance(frame, EventFrame):
         return frame.with_lazy_frame(lazy)  # type: ignore[return-value]
+    if isinstance(frame, pl.DataFrame):
+        return lazy.collect()  # type: ignore[return-value]
     return lazy  # type: ignore[return-value]
 
 
@@ -119,7 +132,8 @@ def walk_forward_splits(
     so a fold can never share a time bin between train and test.
 
     Args:
-        frame: Input frame (LazyFrame or EventFrame).
+        frame: Input frame (LazyFrame, EventFrame, or collected
+            DataFrame — the folds are returned in the same kind).
         time_col: Temporal column (Datetime or Date).
         initial_train: Duration of the first train window.
         step: Duration each fold advances the test window by.
@@ -130,8 +144,9 @@ def walk_forward_splits(
         :class:`WalkForwardFold` values in chronological order.
 
     Raises:
-        ValueError: missing/non-temporal time column, non-positive
-            ``initial_train``/``step``, negative gap, or ``max_folds`` < 1.
+        ValueError: missing/non-temporal time column, a time column
+            containing nulls, non-positive ``initial_train``/``step``,
+            negative gap, or ``max_folds`` < 1.
     """
     where = "walk_forward_splits"
     lazy = _as_lazy(frame)
@@ -142,6 +157,7 @@ def walk_forward_splits(
         raise ValueError(
             f"{where}: time column {time_col!r} has dtype {dtype}; expected Datetime or Date"
         )
+    _require_no_nulls(lazy, time_col, where=where)
     embargo = gap if gap is not None else dt.timedelta(0)
     _validate_window(initial_train, step, embargo)
     if max_folds is not None and max_folds < 1:
@@ -177,10 +193,10 @@ def walk_forward_splits(
 
 
 def _count(frame: FrameLike) -> int:
-    """Row count of a LazyFrame or EventFrame."""
+    """Row count of a LazyFrame, EventFrame, or DataFrame."""
     if isinstance(frame, EventFrame):
         return frame.count()
-    return int(frame.select(pl.len()).collect().item())
+    return int(_as_lazy(frame).select(pl.len()).collect().item())
 
 
 def evaluate_walk_forward(
@@ -220,10 +236,18 @@ def evaluate_walk_forward(
         One :class:`FoldResult` per fold, in chronological order.
 
     Raises:
+        TypeError: *frame* is not an EventFrame — pipeline steps operate
+            on EventFrames, so a LazyFrame or DataFrame cannot run here
+            (use :func:`walk_forward_splits` for frame-level folds).
         ValueError: no fold is produced (e.g. the frame is shorter than
             ``initial_train + step``), or ``score_fn`` returns a malformed
             result.
     """
+    if not isinstance(frame, EventFrame):
+        raise TypeError(
+            "evaluate_walk_forward: frame must be an EventFrame (pipeline steps "
+            f"operate on EventFrames), got {type(frame).__name__}"
+        )
     results: list[FoldResult] = []
     for fold in walk_forward_splits(
         frame, time_col, initial_train, step, gap=gap, max_folds=max_folds
