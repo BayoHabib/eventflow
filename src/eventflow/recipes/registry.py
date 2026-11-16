@@ -23,6 +23,16 @@ def _load_builtin_recipes() -> None:
         from eventflow.datasets.chicago_crime.recipes.chicago_crime_v1 import ChicagoCrimeV1Recipe
 
         register_recipe("chicago_crime", "chicago_crime_v1", ChicagoCrimeV1Recipe)
+    if "beijing_air_quality_v1" not in _RECIPE_REGISTRY.get("beijing_air_quality", {}):
+        from eventflow.datasets.beijing_air_quality.recipes.beijing_air_quality_v1 import (
+            BeijingAirQualityV1Recipe,
+        )
+
+        register_recipe("beijing_air_quality", "beijing_air_quality_v1", BeijingAirQualityV1Recipe)
+    if "geolife_v1" not in _RECIPE_REGISTRY.get("geolife", {}):
+        from eventflow.datasets.geolife.recipes.geolife_v1 import GeoLifeV1Recipe
+
+        register_recipe("geolife", "geolife_v1", GeoLifeV1Recipe)
 
 
 def register_recipe(

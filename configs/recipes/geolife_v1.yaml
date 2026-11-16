@@ -1,0 +1,17 @@
+dataset: "geolife"
+recipe: "geolife_v1"
+
+# Phase 3 (2026-11-15): third representation (trajectories) on a GeoLife
+# subset. The recipe builds its steps directly in code; the features
+# section is unused. The panel-family steps (CompletePanel, spatial lag,
+# KDE/STKDE, near-repeat, Hawkes) are deliberately NOT wired here — see
+# docs/design-notes/phase3-geolife-boundary.md.
+grid:
+  size_m: 100  # 100 m x 100 m grid cells for the fix-count panel
+
+temporal:
+  time_bin: "5m"  # 5-minute time bins for the fix-count panel
+
+output:
+  format: "parquet"
+  compression: "snappy"

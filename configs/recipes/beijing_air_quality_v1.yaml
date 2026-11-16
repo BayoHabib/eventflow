@@ -1,0 +1,14 @@
+dataset: "beijing_air_quality"
+recipe: "beijing_air_quality_v1"
+
+# Phase 3 (2026-11-15): second-domain proof on the UCI Multi-Site Air
+# Quality data (dataset 501, DOI 10.24432/C5RK5G). Panel = station x hour.
+# The grid section is unused by this recipe (stations are fixed points,
+# not grid cells) and keeps its defaults. The recipe builds its steps
+# directly in code; the features section is unused.
+temporal:
+  time_bin: "1h"  # Hourly panel by construction; any other value is rejected
+
+output:
+  format: "parquet"
+  compression: "snappy"

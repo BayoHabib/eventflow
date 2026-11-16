@@ -142,6 +142,80 @@ class TestReferenceOutput:
         assert generated["count"].to_list() == [0]
 
 
+class TestMeasureCols:
+    """Measurement columns stay null: never zero-filled, on any pair."""
+
+    def _frame(self) -> EventFrame:
+        # Station A in bins 1-3 (PM2.5 missing at bin 2), station B in
+        # bin 2 only — so (B, bin 1) and (B, bin 3) are generated pairs.
+        lf = pl.LazyFrame(
+            {
+                "grid_id": [1, 1, 1, 2],
+                "time_bin": [_bin(1), _bin(2), _bin(3), _bin(2)],
+                "count": [1, 1, 1, 1],
+                "PM2.5": [10.0, None, 30.0, 5.0],
+                "zone": ["north", "north", "north", "south"],
+                "latitude": [41.8781] * 4,
+                "longitude": [-87.6298] * 4,
+            }
+        )
+        schema = EventSchema(
+            timestamp_col="time_bin",
+            lat_col="latitude",
+            lon_col="longitude",
+            numeric_cols=["count", "PM2.5"],
+            categorical_cols=["zone"],
+        )
+        metadata = EventMetadata(dataset_name="test-panel", crs="EPSG:4326", time_bin="1d")
+        return EventFrame(lf, schema, metadata)
+
+    def test_generated_pairs_get_null_measurements_and_zero_counts(self) -> None:
+        result = CompletePanelStep(measure_cols=["PM2.5"]).run(self._frame()).collect()
+        assert result.height == 6  # 2 units x 3 bins
+        generated = result.filter((pl.col("grid_id") == 2) & (pl.col("time_bin") == _bin(1)))
+        assert generated["count"].item() == 0
+        assert generated["PM2.5"].item() is None
+        # The NA count is identical before and after completion: the only
+        # null is the observed missing reading at (1, bin 2).
+        assert result["PM2.5"].null_count() == 3  # 1 observed + 2 generated
+
+    def test_observed_null_measurement_stays_null(self) -> None:
+        result = CompletePanelStep(measure_cols=["PM2.5"]).run(self._frame()).collect()
+        observed = result.filter((pl.col("grid_id") == 1) & (pl.col("time_bin") == _bin(2)))
+        assert observed["count"].item() == 1
+        assert observed["PM2.5"].item() is None
+
+    def test_observed_measurements_preserved(self) -> None:
+        result = CompletePanelStep(measure_cols=["PM2.5"]).run(self._frame()).collect()
+        row = result.filter((pl.col("grid_id") == 1) & (pl.col("time_bin") == _bin(3)))
+        assert row["PM2.5"].item() == 30.0
+
+    def test_measure_col_in_value_cols_raises(self) -> None:
+        with pytest.raises(ValueError, match="must not overlap value_cols"):
+            CompletePanelStep(value_cols=["count", "PM2.5"], measure_cols=["PM2.5"])
+
+    def test_measure_col_matching_value_prefix_raises(self) -> None:
+        with pytest.raises(ValueError, match="matched measure column"):
+            CompletePanelStep(
+                value_cols=["count"], measure_cols=["PM2.5"], value_prefixes=["PM"]
+            ).run(self._frame())
+
+    def test_missing_measure_col_raises(self) -> None:
+        with pytest.raises(ValueError, match="missing from the frame"):
+            CompletePanelStep(measure_cols=["NO2"]).run(self._frame())
+
+    def test_non_numeric_measure_col_raises(self) -> None:
+        with pytest.raises(ValueError, match="must be numeric"):
+            CompletePanelStep(measure_cols=["zone"]).run(self._frame())
+
+    def test_config_round_trips_measure_cols(self) -> None:
+        config = CompletePanelConfig(value_cols=["count"], measure_cols=["PM2.5"])
+        assert config.measure_cols == ["PM2.5"]
+        assert CompletePanelConfig().measure_cols == []
+        step = CompletePanelStep(**config.model_dump())
+        assert step.run(self._frame()).collect()["PM2.5"].null_count() == 3
+
+
 class TestMinPeriods:
     """A unit enters the panel only if observed in enough distinct bins."""
 

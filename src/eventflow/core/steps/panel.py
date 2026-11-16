@@ -15,16 +15,25 @@ output — observed or generated — carries ``observation_status =
 ("observed" / "missing" / "outside"): a generated pair is in-support
 by construction.
 
+Measurement columns (``measure_cols``) are the exception to the
+zero-fill: a measurement is not a count, and a missing reading is not
+a zero reading. Measure columns are carried through the (unit, time)
+join like value columns, but they are never filled: generated pairs
+get null and an observed null stays null, so the NA count per
+measurement column is identical before and after completion. Declaring
+a measurement in ``value_cols`` (or matching it with a
+``value_prefixes`` entry) is an error, not a silent zero-fill.
+
 Ordering guarantee: completion must run on an aggregated frame whose
 time column is already binned (for example the ``time_bin`` produced by
 ``TimeBinsStep``), and before any feature derived from the time bin
 itself (for example ``ExtractTemporalComponentsStep``). Columns other
-than the unit, time and value columns are classified per unit: a column
-that is constant within each unit is a static attribute and is carried
-to every pair of that unit; a column that varies within a unit (for
-example a per-(unit, time) share or entropy) is joined on (unit, time)
-instead, so observed pairs keep their value and generated pairs get
-null — never silently collapsed with ``first()``.
+than the unit, time, value and measure columns are classified per unit:
+a column that is constant within each unit is a static attribute and
+is carried to every pair of that unit; a column that varies within a
+unit (for example a per-(unit, time) share or entropy) is joined on
+(unit, time) instead, so observed pairs keep their value and generated
+pairs get null — never silently collapsed with ``first()``.
 """
 
 from __future__ import annotations
@@ -67,6 +76,15 @@ class CompletePanelConfig(BaseModel):
     value_cols: list[str] = Field(
         default=["count"], description="Numeric columns to zero-fill for generated pairs"
     )
+    measure_cols: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Numeric measurement columns to carry through the (unit, time) "
+            "join without zero-filling: generated pairs get null and an "
+            "observed null stays null, so a missing reading is never "
+            "turned into a zero reading"
+        ),
+    )
     value_prefixes: list[str] = Field(
         default_factory=list,
         description=(
@@ -101,6 +119,9 @@ class CompletePanelStep(Step):
         - status_col ("observed" for every row: generated pairs are
           in-support by construction)
         - value_cols zero-filled for generated (unit, time-bin) pairs
+        - measure_cols carried through the (unit, time) join, never
+          zero-filled: null on generated pairs, nulls preserved on
+          observed pairs
     """
 
     def __init__(
@@ -109,6 +130,7 @@ class CompletePanelStep(Step):
         time_col: str | None = None,
         bin_size: str | None = None,
         value_cols: Sequence[str] | None = None,
+        measure_cols: Sequence[str] | None = None,
         value_prefixes: Sequence[str] | None = None,
         min_periods: int = 1,
         status_col: str = "observation_status",
@@ -117,6 +139,7 @@ class CompletePanelStep(Step):
         self.time_col = time_col
         self.bin_size = bin_size
         self.value_cols = list(value_cols) if value_cols is not None else ["count"]
+        self.measure_cols = list(measure_cols) if measure_cols is not None else []
         self.value_prefixes = list(value_prefixes) if value_prefixes else []
         self.min_periods = min_periods
         self.status_col = status_col
@@ -128,16 +151,32 @@ class CompletePanelStep(Step):
             raise ValueError("value_prefixes must be non-empty strings")
         if len(set(self.value_cols)) != len(self.value_cols):
             raise ValueError("value_cols must not contain duplicates")
+        if any(not isinstance(c, str) or not c for c in self.measure_cols):
+            raise ValueError("measure_cols must be non-empty strings")
+        if len(set(self.measure_cols)) != len(self.measure_cols):
+            raise ValueError("measure_cols must not contain duplicates")
+        if set(self.measure_cols) & set(self.value_cols):
+            raise ValueError(
+                "measure_cols must not overlap value_cols: a column is either "
+                "a count (zero-filled) or a measurement (never zero-filled), not both"
+            )
         if self.unit_col in self.value_cols or (
             self.time_col is not None and self.time_col in self.value_cols
         ):
             raise ValueError("value_cols must not include the unit or time column")
+        if self.unit_col in self.measure_cols or (
+            self.time_col is not None and self.time_col in self.measure_cols
+        ):
+            raise ValueError("measure_cols must not include the unit or time column")
         if self.unit_col == self.time_col or self.status_col in {
             self.unit_col,
             self.time_col,
             *self.value_cols,
+            *self.measure_cols,
         }:
-            raise ValueError("unit_col, time_col, value_cols and status_col must be distinct")
+            raise ValueError(
+                "unit_col, time_col, value_cols, measure_cols and status_col must be distinct"
+            )
         if bin_size is not None:
             # Raises ValueError on unparseable values such as "1month".
             duration_seconds(bin_size)
@@ -170,6 +209,9 @@ class CompletePanelStep(Step):
         for value_col in self.value_cols:
             if value_col not in schema:
                 raise ValueError(f"Value column {value_col!r} is missing from the frame")
+        for measure_col in self.measure_cols:
+            if measure_col not in schema:
+                raise ValueError(f"Measure column {measure_col!r} is missing from the frame")
         # Prefix-matched value columns (for example per-category count
         # columns whose exact names depend on the data): resolved here,
         # once the frame schema is known.
@@ -180,6 +222,12 @@ class CompletePanelStep(Step):
                 and name not in {unit_col, time_col, status_col}
                 and any(name.startswith(prefix) for prefix in self.value_prefixes)
             ):
+                if name in self.measure_cols:
+                    raise ValueError(
+                        f"Value prefix matched measure column {name!r}: a column is "
+                        "either a count (zero-filled) or a measurement "
+                        "(never zero-filled), not both"
+                    )
                 value_cols.append(name)
 
         # Validate on the (unit, time) keys only; the full frame stays lazy
@@ -195,6 +243,11 @@ class CompletePanelStep(Step):
             if not schema[value_col].is_numeric():
                 raise ValueError(
                     f"Value column {value_col!r} must be numeric, got {schema[value_col]}"
+                )
+        for measure_col in self.measure_cols:
+            if not schema[measure_col].is_numeric():
+                raise ValueError(
+                    f"Measure column {measure_col!r} must be numeric, got {schema[measure_col]}"
                 )
         if keys[unit_col].null_count() or keys[time_col].null_count():
             raise ValueError("Unit and time columns cannot contain nulls")
@@ -234,14 +287,18 @@ class CompletePanelStep(Step):
             )
         n_units = kept.height
 
-        # Columns other than the unit, time and value columns are
+        # Columns other than the unit, time, value and measure columns are
         # classified per unit: constant within each unit means a static
         # attribute, carried to every pair of that unit; varying within
         # a unit means a per-(unit, time) value (for example a share or
         # an entropy), which is joined on (unit, time) instead — observed
         # pairs keep their value, generated pairs get null. Nothing is
         # ever silently collapsed with first().
-        other_cols = [c for c in schema.names() if c not in {unit_col, time_col, *value_cols}]
+        other_cols = [
+            c
+            for c in schema.names()
+            if c not in {unit_col, time_col, *value_cols, *self.measure_cols}
+        ]
         static_cols: list[str] = []
         varying_cols: list[str] = []
         if other_cols:
@@ -280,7 +337,7 @@ class CompletePanelStep(Step):
         if static_cols:
             static_lf = lf.group_by(unit_col).agg([pl.col(c).first().alias(c) for c in static_cols])
             panel = panel.join(static_lf, on=unit_col, how="left", validate="m:1")
-        observed = lf.select([unit_col, time_col, *value_cols, *varying_cols])
+        observed = lf.select([unit_col, time_col, *value_cols, *self.measure_cols, *varying_cols])
         result_lf = (
             panel.join(observed, on=[unit_col, time_col], how="left", validate="1:1")
             .with_columns(
@@ -288,6 +345,9 @@ class CompletePanelStep(Step):
                     pl.col(value_col).fill_null(0).cast(schema[value_col]).alias(value_col)
                     for value_col in value_cols
                 ]
+                # Measure columns are deliberately NOT filled: a generated
+                # pair gets null and an observed null stays null, so a
+                # missing reading is never turned into a zero reading.
                 + [pl.lit("observed").alias(status_col)]
             )
             .sort([unit_col, time_col])
@@ -295,18 +355,20 @@ class CompletePanelStep(Step):
 
         provenance = FeatureProvenance(
             produced_by="CompletePanelStep",
-            inputs=[unit_col, time_col, *value_cols],
+            inputs=[unit_col, time_col, *value_cols, *self.measure_cols],
             tags={"temporal", "spatial"},
             description=(
                 "Observation status: every (unit, time-bin) pair in the completed "
                 "panel is in-support, so generated pairs are 'observed' with "
-                "explicit zero values"
+                "explicit zero values for count columns and null for "
+                "measurement columns"
             ),
             metadata={
                 "min_periods": self.min_periods,
                 "bin_size": bin_size,
                 "n_units": n_units,
                 "n_bins": n_bins,
+                "measure_cols": list(self.measure_cols),
             },
         )
         result = event_frame.with_lazy_frame(result_lf)

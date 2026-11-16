@@ -1,0 +1,5 @@
+dataset_name: beijing_air_quality
+raw_root: "data/raw/beijing_air_quality"
+layout: "nested"
+crs: "EPSG:4326"  # Station coordinates are WGS 84 decimal degrees
+time_zone: "Asia/Shanghai"
