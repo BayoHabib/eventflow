@@ -58,8 +58,9 @@ Shikong transforms raw event data (crime records, sensor readings, transactions,
 - 🗺️ **Spatial operations** - grid binning, zone assignment, adjacency graphs
 - ⏰ **Temporal features** - time bins, rolling windows, inter-event times
 - 📊 **Point process features** - intensity estimation, kernel smoothing
+- 🧬 **STPP exact-event emitters** - Gatech/THP/EasyTPP sequences, EarthquakeNPP-style catalog CSVs with `(t, x, y)` arrays, and tick per-node timestamp lists, from exact `(time, x, y, mark)` events (see `docs/design-notes/stpp-emitters.md`); data only, no fitted model
 - 🧪 **Composable pipelines** - registry-based step system
-- ✅ **Validated** - 1,046 tests passing, 86% coverage (measured 2026-11-16; see `docs/audit/`)
+- ✅ **Validated** - 1,109 tests passing, 86% coverage (measured 2026-11-16; see `docs/audit/`)
 
 ## What Shikong does not do
 
@@ -291,7 +292,7 @@ shikong/
 │   ├── recipes/           # Composable pipelines
 │   └── tracking/          # MLflow integration
 ├── notebooks/             # Demo notebooks
-├── tests/                 # 1,046 tests passing (measured 2026-11-16)
+├── tests/                 # 1,109 tests passing (measured 2026-11-16)
 └── docs/                  # Documentation
 ```
 

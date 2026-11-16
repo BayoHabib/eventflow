@@ -8,6 +8,34 @@ may still change.
 
 ## [Unreleased]
 
+### Added
+
+- **STPP exact-event emitters** (`src/shikong/stpp/`, first STPP
+  increment — data only, no fitted model). `extract_exact_events`
+  turns an `EventFrame` into chronologically sorted exact events
+  (projected kilometres, sorted mark codebook, null/non-finite values
+  refused loudly); `chronological_event_splits` chains the library's
+  own `temporal_split` with embargo gaps and reconciles splits +
+  embargos against the cleaned total; `emit_gatech` (Gatech / THP /
+  EasyTPP `{split}.pkl` + `.json`), `emit_catalog` (EarthquakeNPP-style
+  `{split}_catalog.csv` — no `magnitude` column, crime has none — plus
+  float64 `{split}_txy.npy`) and `emit_tick` (per-node timestamp
+  lists) write the three formats plus a deterministic `manifest.json`
+  stating "no fitted model". Scripts `scripts/emit_chicago_stpp.py`
+  and `scripts/emit_geolife_stpp.py` emit Chicago Q1 2024 (60,235
+  cleaned events; aux 8,922 / train 30,464 / dev 8,065 / test 9,915,
+  embargos 1,435 + 1,434) and the GeoLife Phase 3 subset (1,471 fixes;
+  auxiliary 14 days, remainder split in thirds, embargo 0 — a 2-day
+  embargo would swallow the 49-minute remainder). Emitted data files
+  live outside the repo (`~/workspace/eventflow-eda/stpp-emitters/`).
+  40 tests in `tests/stpp/test_emitters.py` (synthetic frames only);
+  design note `docs/design-notes/stpp-emitters.md`; independent
+  verification `audit/stpp-emitters/verify_emissions.py` (395 checks,
+  0 failures). Compatibility is claimed only for the formats read
+  verbatim (Gatech/THP, EarthquakeNPP CSV, tick); DeepSTPP/AutoSTPP/
+  SMASH loaders and ETAS catalog columns remain unverified (inventory
+  §7) and are not guessed.
+
 ### Changed
 
 - **Renamed: EventFlow → Shikong (时空, shíkōng, "space-time").** The PyPI
