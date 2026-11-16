@@ -17,6 +17,12 @@ from eventflow.core.steps.context import (
     SpatioTemporalContextJoinStep,
     TemporalContextJoinStep,
 )
+from eventflow.core.steps.density import (
+    KernelDensityConfig,
+    KernelDensityStep,
+    SpaceTimeKernelDensityConfig,
+    SpaceTimeKernelDensityStep,
+)
 from eventflow.core.steps.domain import (
     GridDomainCoverageStep,
     SpatialDomainMaskConfig,
@@ -34,6 +40,8 @@ from eventflow.core.steps.dynamics import (
     ZeroFeaturesConfig,
     ZeroFeaturesStep,
 )
+from eventflow.core.steps.hawkes import HawkesExcitationConfig, HawkesExcitationStep
+from eventflow.core.steps.near_repeat import NearRepeatConfig, NearRepeatStep
 from eventflow.core.steps.observation import ObservationPanelStep
 from eventflow.core.steps.panel import CompletePanelConfig, CompletePanelStep
 from eventflow.core.steps.point_process import (
@@ -71,6 +79,8 @@ from eventflow.core.steps.spatial import (
     KDEStep,
     LocalAutocorrelationConfig,
     LocalMoranStep,
+    MultiScaleSpatialLagConfig,
+    MultiScaleSpatialLagStep,
     SpatialLagConfig,
     SpatialLagStep,
     TransformCRSConfig,
@@ -204,6 +214,46 @@ def register_builtin_steps(registry: FeatureStepRegistry) -> None:
         tags=["spatial"],
         description="Compute spatial lag (weighted average of neighbors)",
         config_model=SpatialLagConfig,
+    )
+
+    registry.register(
+        "multiscale_spatial_lag",
+        MultiScaleSpatialLagStep,
+        tags=["spatial"],
+        description="Compute spatial lag over disjoint queen rings (multi-scale)",
+        config_model=MultiScaleSpatialLagConfig,
+    )
+
+    registry.register(
+        "kernel_density",
+        KernelDensityStep,
+        tags=["spatial", "continuous"],
+        description="Compute Gaussian kernel density at cell centres",
+        config_model=KernelDensityConfig,
+    )
+
+    registry.register(
+        "space_time_kde",
+        SpaceTimeKernelDensityStep,
+        tags=["spatial", "temporal", "continuous"],
+        description="Compute separable space-time kernel density (Gaussian in space, exponential in time)",
+        config_model=SpaceTimeKernelDensityConfig,
+    )
+
+    registry.register(
+        "near_repeat",
+        NearRepeatStep,
+        tags=["spatial", "temporal"],
+        description="Compute near-repeat ring counts over trailing time windows",
+        config_model=NearRepeatConfig,
+    )
+
+    registry.register(
+        "hawkes_excitation",
+        HawkesExcitationStep,
+        tags=["temporal", "continuous"],
+        description="Compute fixed-kernel Hawkes excitation from past bins only",
+        config_model=HawkesExcitationConfig,
     )
 
     registry.register(

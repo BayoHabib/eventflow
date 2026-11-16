@@ -7,6 +7,7 @@ from eventflow.core.pipeline import Pipeline, Step
 from eventflow.core.registry import StepRegistry
 from eventflow.core.schema import RecipeConfig
 from eventflow.core.steps.categorical import CategoryCountsStep
+from eventflow.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
 from eventflow.core.steps.dynamics import (
     BurstinessStep,
     EWMAMeanStep,
@@ -14,8 +15,14 @@ from eventflow.core.steps.dynamics import (
     TrendStep,
     ZeroFeaturesStep,
 )
+from eventflow.core.steps.hawkes import HawkesExcitationStep
+from eventflow.core.steps.near_repeat import NearRepeatStep
 from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.spatial import AssignToGridStep, SpatialLagStep, TransformCRSStep
+from eventflow.core.steps.spatial import (
+    AssignToGridStep,
+    MultiScaleSpatialLagStep,
+    TransformCRSStep,
+)
 from eventflow.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
@@ -98,6 +105,11 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
       lags and rolling means over the declared aggregation windows, EWMA,
       cyclical calendar encodings, queen spatial lag of the shortest lag,
       trend, time since last event, burstiness and zero features.
+    - Phase 2 space-time features (all opt-in via the features section):
+      multi-scale queen-ring spatial lag of the shortest lag, Gaussian KDE
+      of the shortest lag, separable space-time KDE of the count,
+      near-repeat ring counts, and fixed-kernel Hawkes excitation of the
+      count. See docs/design-notes/phase2-spacetime-v2.md.
 
     Causality convention (docs/design-notes/phase1-causality.md): a feature
     row at bin ``t`` predicts bin ``t + 1``; no feature may use data after
@@ -219,21 +231,75 @@ class ChicagoCrimeV1Recipe(BaseRecipe):
                     long_col=f"count_ma_{longest}",
                 )
             )
-        if features.spatial_lag:
+        if features.spatial_lag or features.kde_bandwidth_m is not None:
             shortest = window_days[0]
             lag_col = f"count_lag_{shortest}"
             # Boundary policy: before the panel start there is no earlier
             # bin, so the lagged count is treated as 0 ("no events
-            # recorded") instead of null — SpatialLagStep requires finite
-            # non-null values. Only the lag feeding the spatial lag is
-            # filled; the other lags keep their nulls.
+            # recorded") instead of null — the spatial lag and the KDE
+            # require finite non-null values. Only the lag feeding those
+            # steps is filled; the other lags keep their nulls.
             steps.append(FillNullStep(value_cols=[lag_col], fill_value=0))
+        if features.spatial_lag:
+            shortest = window_days[0]
+            lag_col = f"count_lag_{shortest}"
+            # Phase 2: multi-scale queen-ring lag (rings 1-3 by default);
+            # ring 1 reproduces the phase-1 single-scale lag exactly.
             steps.append(
-                SpatialLagStep(
+                MultiScaleSpatialLagStep(
                     value_cols=[lag_col],
                     neighbor_col="grid_id",
-                    weights="queen",
+                    rings=features.spatial_lag_rings,
                     group_cols=[timestamp_col],
+                )
+            )
+        if features.kde_bandwidth_m is not None:
+            shortest = window_days[0]
+            lag_col = f"count_lag_{shortest}"
+            # Phase 2: Gaussian KDE of the lagged count (same convention
+            # as the spatial lag — the density at bin t describes
+            # neighbours' counts from the previous day).
+            steps.append(
+                KernelDensityStep(
+                    value_col=lag_col,
+                    bandwidth_m=features.kde_bandwidth_m,
+                    group_cols=[timestamp_col],
+                )
+            )
+        if features.stkde_bandwidth_m is not None:
+            # Phase 2: separable space-time KDE of the count (Gaussian in
+            # space, exponential decay in time, past bins including the
+            # current one — same precedent as the EWMA).
+            # require_implemented() enforces both-or-neither for the
+            # STKDE pair, so the half-life is not None here.
+            stkde_halflife = features.stkde_halflife_days
+            assert stkde_halflife is not None
+            steps.append(
+                SpaceTimeKernelDensityStep(
+                    value_col="count",
+                    bandwidth_m=features.stkde_bandwidth_m,
+                    halflife_days=stkde_halflife,
+                    # The canonical bin datetime: the pre-completion
+                    # "time_bin" column is null on generated (explicit-
+                    # zero) panel rows, so grouping/sorting by it would
+                    # silently corrupt the time smoothing (phase 2).
+                    time_col=timestamp_col,
+                )
+            )
+        if features.near_repeat:
+            # Phase 2: near-repeat ring counts over trailing 7 d and
+            # 7-14 d windows, closed-left (strictly before t). Same
+            # time-column caveat as STKDE above: use the canonical bin
+            # datetime, not the pre-completion "time_bin" column.
+            steps.append(NearRepeatStep(value_col="count", time_col=timestamp_col))
+        if features.hawkes_halflife_days is not None:
+            # Phase 2: fixed-kernel Hawkes excitation of the count,
+            # strictly past bins only (no fitted Hawkes process).
+            steps.append(
+                HawkesExcitationStep(
+                    value_col="count",
+                    halflife_days=features.hawkes_halflife_days,
+                    group_cols=["grid_id"],
                 )
             )
         if features.recency:

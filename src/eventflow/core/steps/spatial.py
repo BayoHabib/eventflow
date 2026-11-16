@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import polars as pl
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from shapely import STRtree, geometry
 from shapely.wkt import loads as wkt_loads
 
@@ -29,6 +29,27 @@ if TYPE_CHECKING:
     from eventflow.core.event_frame import EventFrame
 
 logger = get_logger(__name__)
+
+
+def _validate_rings(rings: object) -> list[int]:
+    """Validate a ring list: non-empty, unique, positive integers."""
+    if isinstance(rings, (str, bytes)):
+        raise ValueError("rings must be a sequence of positive integers")
+    try:
+        ring_list = list(rings)  # type: ignore[call-overload]
+    except TypeError:
+        raise ValueError("rings must be a sequence of positive integers") from None
+    validated: list[int] = []
+    for ring in ring_list:
+        if isinstance(ring, bool) or not isinstance(ring, (int, np.integer)) or int(ring) < 1:
+            raise ValueError(f"rings must contain positive integers, got {ring!r}")
+        validated.append(int(ring))
+    if not validated:
+        raise ValueError("rings must not be empty")
+    if len(set(validated)) != len(validated):
+        raise ValueError("rings must not contain duplicates")
+    return validated
+
 
 # -----------------------------------------------------------------------------
 # Pydantic Config Models for Step Parameters
@@ -105,6 +126,24 @@ class SpatialLagConfig(BaseModel):
     distance_threshold: float | None = Field(
         default=None, description="Distance threshold for distance-based weights"
     )
+
+
+class MultiScaleSpatialLagConfig(BaseModel):
+    """Configuration for multi-scale spatial lag computation step."""
+
+    neighbor_col: str = Field(default="grid_id", description="Spatial unit identifier column")
+    value_cols: list[str] = Field(..., description="Columns to compute multi-scale spatial lag for")
+    rings: list[int] = Field(
+        default=[1, 2, 3],
+        description="Queen rings (Chebyshev distances) to lag over; ring 1 is queen contiguity",
+    )
+    group_cols: list[str] = Field(default_factory=list)
+
+    @field_validator("rings", mode="before")
+    @classmethod
+    def _check_rings(cls, rings: object) -> object:
+        _validate_rings(rings)
+        return rings
 
 
 class LocalAutocorrelationConfig(BaseModel):
@@ -498,7 +537,14 @@ class GridAggregationStep(Step):
 
 
 class KDEStep(Step):
-    """Compute Kernel Density Estimation for event locations.
+    """Approximate local density for event locations (not a kernel density).
+
+    Counts neighbours inside the bandwidth and divides by the buffer area;
+    no kernel function is applied, so this is a uniform-kernel count
+    density, not a Gaussian (or other) KDE. For a proper Gaussian KDE on
+    the completed panel use ``KernelDensityStep``; for a space-time KDE use
+    ``SpaceTimeKernelDensityStep``. Kept registered for backwards
+    compatibility.
 
     Inputs:
         - lat_col, lon_col from EventSchema
@@ -581,12 +627,232 @@ class KDEStep(Step):
         )
 
 
-class SpatialLagStep(Step):
-    """Row-standardized binary spatial lag on explicitly identified units.
+# -----------------------------------------------------------------------------
+# Vectorized spatial lag helpers (shared by SpatialLagStep and
+# MultiScaleSpatialLagStep). LocalMoranStep / GetisOrdStep keep using the
+# per-snapshot helper _spatial_snapshots below.
+# -----------------------------------------------------------------------------
 
-    Defaults to a single spatial snapshot. Supply group_cols (for example,
-    time_bin) to compute separate snapshots without pooling across time.
-    Islands yield null; absent reference units require an explicit panel.
+
+def _require_spatial_columns(
+    df: pl.DataFrame, unit_col: str, value_cols: list[str], group_cols: list[str]
+) -> None:
+    missing = sorted({unit_col, *value_cols, *group_cols} - set(df.columns))
+    if missing:
+        raise ValueError(f"Missing required column(s): {', '.join(missing)}")
+
+
+def _validate_spatial_values(
+    df: pl.DataFrame, unit_col: str, value_cols: list[str], group_cols: list[str]
+) -> None:
+    if df[unit_col].null_count() or any(df[c].null_count() for c in group_cols):
+        raise ValueError("Spatial unit and snapshot keys cannot contain nulls")
+    if any(not np.isfinite(df[c].to_numpy().astype(float)).all() for c in value_cols):
+        raise ValueError(
+            "Spatial statistics require finite observed values; choose a missing-data policy first"
+        )
+
+
+def _aggregate_stats(
+    df: pl.DataFrame, unit_col: str, value_cols: list[str], group_cols: list[str]
+) -> pl.DataFrame:
+    """Mean of each value column per (snapshot key, unit)."""
+    return df.group_by([*group_cols, unit_col]).agg([pl.col(c).mean().alias(c) for c in value_cols])
+
+
+def _lag_means(
+    stats: pl.DataFrame,
+    edges: pl.DataFrame,
+    group_cols: list[str],
+    unit_col: str,
+    value_cols: list[str],
+) -> pl.DataFrame:
+    """Row-standardized binary lag: one join + one ``group_by`` mean over edges.
+
+    ``edges`` carries (unit, neighbour) pairs. Joining on the neighbour key
+    alone replicates each edge across snapshots, so the lag stays
+    per-snapshot with no pooling across time. Units with no edges (islands)
+    get no rows here and therefore null lags after the join. The neighbour
+    key is dropped right after the join: it only widens the intermediate
+    (edges x snapshots) that the ``group_by`` must scan. The join + group_by
+    run through the lazy engine: on Chicago-size panels it is roughly twice
+    as fast as the eager equivalent (the optimizer pipelines the aggregation
+    instead of materializing the full intermediate first).
+    """
+    return (
+        edges.lazy()
+        .join(stats.lazy().rename({unit_col: "__nbr"}), on="__nbr", how="inner")
+        .drop("__nbr")
+        .group_by([*group_cols, unit_col])
+        .agg([pl.col(c).mean().alias(c) for c in value_cols])
+        .collect()
+    )
+
+
+def _edges_from_weights(weights: SpatialWeights, unit_col: str) -> pl.DataFrame:
+    """One (unit, neighbour) row per binary edge; islands get no rows."""
+    unit_ids = list(weights.unit_ids)
+    edges = pl.DataFrame(
+        {unit_col: unit_ids, "__nbr_idx": [list(row) for row in weights.neighbors]},
+        schema_overrides={"__nbr_idx": pl.List(pl.Int64)},
+    ).explode("__nbr_idx")
+    index = pl.DataFrame({"__nbr_idx": list(range(len(unit_ids))), "__nbr": unit_ids})
+    return (
+        edges.drop_nulls(subset=["__nbr_idx"])
+        .join(index, on="__nbr_idx", how="left")
+        .drop("__nbr_idx")
+        .select(unit_col, "__nbr")
+    )
+
+
+def _reference_weights(
+    df: pl.DataFrame,
+    event_frame: EventFrame,
+    unit_col: str,
+    method: str,
+    k: int,
+    threshold: float | None,
+    spatial_units: pl.DataFrame | None,
+    supplied: SpatialWeights | None,
+    data_ids: list,
+) -> SpatialWeights:
+    """Build the neighbour graph once from the panel's distinct units."""
+    if supplied is not None:
+        if set(supplied.unit_ids) != set(data_ids):
+            raise ValueError(
+                "Spatial weights and data must contain the same units; "
+                "complete the observation panel first"
+            )
+        return supplied
+    geometry_col = event_frame.schema.geometry_col
+    lon_col = event_frame.schema.lon_col
+    lat_col = event_frame.schema.lat_col
+    if spatial_units is not None:
+        reference = spatial_units
+    elif {"grid_row", "grid_col"} <= set(df.columns) and method in {"queen", "rook"}:
+        reference = df.select(unit_col, "grid_row", "grid_col").unique(maintain_order=True)
+    elif geometry_col and geometry_col in df.columns and method in {"queen", "rook"}:
+        reference = df.select(unit_col, pl.col(geometry_col).alias("geometry")).unique(
+            maintain_order=True
+        )
+    elif lon_col and lat_col and lon_col in df.columns and lat_col in df.columns:
+        reference = df.select(
+            unit_col, pl.col(lon_col).alias("x"), pl.col(lat_col).alias("y")
+        ).unique(maintain_order=True)
+    else:
+        raise ValueError("Supply a spatial reference table or SpatialWeights")
+    weights = SpatialWeights.from_units(
+        reference,
+        unit_col,
+        method=method,
+        crs=event_frame.metadata.crs,
+        k=k,
+        distance_threshold=threshold,
+    )
+    if set(weights.unit_ids) != set(data_ids):
+        raise ValueError(
+            "Spatial weights and data must contain the same units; "
+            "complete the observation panel first"
+        )
+    return weights
+
+
+def _grid_reference(
+    df: pl.DataFrame,
+    unit_col: str,
+    spatial_units: pl.DataFrame | None,
+    data_ids: list,
+) -> pl.DataFrame:
+    """Distinct (unit, grid_row, grid_col) table for queen-ring edges."""
+    if spatial_units is not None:
+        reference = spatial_units
+    elif {"grid_row", "grid_col"} <= set(df.columns):
+        reference = df.select(unit_col, "grid_row", "grid_col").unique(maintain_order=True)
+    else:
+        raise ValueError(
+            "Multi-scale spatial lag requires grid_row/grid_col in the panel " "or in spatial_units"
+        )
+    if unit_col not in reference.columns:
+        raise ValueError(f"Spatial reference must carry the unit column {unit_col!r}")
+    if {"grid_row", "grid_col"} - set(reference.columns):
+        raise ValueError("spatial_units must carry grid_row/grid_col for multi-scale spatial lag")
+    if set(reference[unit_col].to_list()) != set(data_ids):
+        raise ValueError(
+            "Spatial weights and data must contain the same units; "
+            "complete the observation panel first"
+        )
+    rows = reference["grid_row"].to_list()
+    cols = reference["grid_col"].to_list()
+    if any(
+        r is None or c is None or int(r) != r or int(c) != c
+        for r, c in zip(rows, cols, strict=True)
+    ):
+        raise ValueError("Grid indices must be non-null integers")
+    if len(set(zip(rows, cols, strict=True))) != len(rows):
+        raise ValueError("Each spatial unit requires a distinct grid location")
+    return reference.select(unit_col, "grid_row", "grid_col")
+
+
+def _queen_ring_edges(units: pl.DataFrame, unit_col: str, rings: list[int]) -> pl.DataFrame:
+    """(unit, neighbour, ring) rows for disjoint queen rings.
+
+    Ring ``r`` is the set of cells at Chebyshev distance exactly ``r`` from
+    the unit, so rings are disjoint and ring 1 is queen contiguity.
+    """
+    offsets = [
+        (ring, dr, dc)
+        for ring in rings
+        for dr in range(-ring, ring + 1)
+        for dc in range(-ring, ring + 1)
+        if max(abs(dr), abs(dc)) == ring
+    ]
+    offsets_df = pl.DataFrame(
+        {
+            "ring": [offset[0] for offset in offsets],
+            "__dr": [offset[1] for offset in offsets],
+            "__dc": [offset[2] for offset in offsets],
+        },
+        schema={"ring": pl.Int64, "__dr": pl.Int64, "__dc": pl.Int64},
+    )
+    candidates = units.join(offsets_df, how="cross").with_columns(
+        (pl.col("grid_row") + pl.col("__dr")).alias("__nbr_row"),
+        (pl.col("grid_col") + pl.col("__dc")).alias("__nbr_col"),
+    )
+    lookup = units.rename({unit_col: "__nbr", "grid_row": "__nbr_row", "grid_col": "__nbr_col"})
+    return candidates.join(lookup, on=["__nbr_row", "__nbr_col"], how="inner").select(
+        unit_col, "__nbr", "ring"
+    )
+
+
+def _empty_spatial_result(event_frame: EventFrame, columns: list[str]) -> EventFrame:
+    """An empty panel gains the output columns as null Float64, nothing else."""
+    lf = event_frame.lazy_frame.with_columns(
+        [pl.lit(None, dtype=pl.Float64).alias(name) for name in columns]
+    )
+    return event_frame.with_lazy_frame(lf)
+
+
+class SpatialLagStep(Step):
+    """Row-standardized binary spatial lag, computed with one edge join.
+
+    The neighbour edge list is built once from the panel's distinct units
+    and the lag is a single join + single ``group_by`` mean in pure Polars:
+    no per-bin snapshots and no Python loop over cells.
+
+    Inputs:
+        - value_cols on the (completed) panel; finite non-null values required
+        - neighbor_col unit identifiers; grid_row/grid_col, polygon geometry,
+          or lon/lat supply the spatial reference (or spatial_units /
+          spatial_weights)
+
+    Outputs:
+        - {value_col}_spatial_lag columns (Float64)
+
+    Window policy: contemporaneous within a snapshot — the lag at bin ``t``
+    reads neighbours' values from the same snapshot only (group_cols, e.g.
+    time_bin, are never pooled). The recipe feeds it lagged counts, so the
+    feature at ``t`` describes neighbours' counts strictly before ``t``.
+    Islands (units with no neighbours) yield null.
     """
 
     def __init__(
@@ -610,32 +876,38 @@ class SpatialLagStep(Step):
         self.spatial_weights = spatial_weights
 
     def run(self, event_frame: EventFrame) -> EventFrame:
-        outputs = []
-        for part, stats, rows in _spatial_snapshots(
+        df = event_frame.collect()
+        _require_spatial_columns(df, self.neighbor_col, self.value_cols, self.group_cols)
+        _validate_spatial_values(df, self.neighbor_col, self.value_cols, self.group_cols)
+        lag_cols = [f"{col}_spatial_lag" for col in self.value_cols]
+        if df.is_empty():
+            return self._register_features(_empty_spatial_result(event_frame, lag_cols))
+        stats = _aggregate_stats(df, self.neighbor_col, self.value_cols, self.group_cols)
+        weights = _reference_weights(
+            df,
             event_frame,
             self.neighbor_col,
-            self.value_cols,
-            self.group_cols,
             self.weights_type,
             self.k,
             self.distance_threshold,
             self.spatial_units,
             self.spatial_weights,
-        ):
-            features = []
-            for col in self.value_cols:
-                values = stats[col].to_numpy()
-                lag = [float(values[list(row)].mean()) if row else None for row in rows]
-                features.append(pl.Series(f"{col}_spatial_lag", lag, dtype=pl.Float64))
-            lookup = stats.select(self.neighbor_col).with_columns(features)
-            outputs.append(
-                part.join(
-                    lookup, on=self.neighbor_col, how="left", validate="m:1", maintain_order="left"
-                )
-            )
-        result = _spatial_result(
-            event_frame, outputs, {f"{col}_spatial_lag": pl.Float64 for col in self.value_cols}
+            stats[self.neighbor_col].to_list(),
         )
+        edges = _edges_from_weights(weights, self.neighbor_col)
+        lag = _lag_means(stats, edges, self.group_cols, self.neighbor_col, self.value_cols)
+        lag = lag.rename({col: f"{col}_spatial_lag" for col in self.value_cols})
+        # maintain_order="left" keeps the panel's row order without a sort.
+        out = df.join(
+            lag,
+            on=[*self.group_cols, self.neighbor_col],
+            how="left",
+            validate="m:1",
+            maintain_order="left",
+        )
+        return self._register_features(event_frame.with_lazy_frame(out.lazy()))
+
+    def _register_features(self, result: EventFrame) -> EventFrame:
         for col in self.value_cols:
             result = result.register_feature(
                 f"{col}_spatial_lag",
@@ -656,6 +928,115 @@ class SpatialLagStep(Step):
                     },
                 ),
             )
+        return result
+
+
+class MultiScaleSpatialLagStep(Step):
+    """Row-standardized binary spatial lag over disjoint queen rings.
+
+    Ring ``r`` is the set of cells at Chebyshev distance exactly ``r`` from
+    the unit, so rings are disjoint and ring 1 reproduces ``SpatialLagStep``
+    exactly. Edges carry the ring number and each ring's lag is one join +
+    one ``group_by`` mean in pure Polars, as in ``SpatialLagStep`` (rings are
+    computed one at a time so the edges x snapshots intermediate stays
+    bounded by the widest ring).
+
+    Inputs:
+        - value_cols on the (completed) panel; finite non-null values required
+        - neighbor_col unit identifiers; grid_row/grid_col in the panel or in
+          spatial_units supply the ring geometry (a supplied SpatialWeights
+          object cannot define rings 2+ and is rejected at construction)
+
+    Outputs:
+        - {value_col}_spatial_lag_r{r} columns (Float64), one per value and ring
+
+    Window policy: contemporaneous within a snapshot, as in ``SpatialLagStep``
+    — the lag at bin ``t`` reads neighbours' values from the same snapshot
+    only (group_cols are never pooled). The recipe feeds it lagged counts.
+    Islands in a ring (units with no neighbours at that Chebyshev distance)
+    yield null for that ring.
+    """
+
+    def __init__(
+        self,
+        value_cols: Sequence[str],
+        neighbor_col: str = "grid_id",
+        rings: Sequence[int] = (1, 2, 3),
+        group_cols: Sequence[str] | None = None,
+        spatial_units: pl.DataFrame | None = None,
+        spatial_weights: SpatialWeights | None = None,
+    ) -> None:
+        if spatial_weights is not None:
+            raise ValueError(
+                "MultiScaleSpatialLagStep cannot derive queen rings from a supplied "
+                "SpatialWeights object; supply grid_row/grid_col (in the panel or "
+                "via spatial_units) instead"
+            )
+        self.value_cols = list(value_cols)
+        self.neighbor_col = neighbor_col
+        self.rings = _validate_rings(rings)
+        self.group_cols = list(group_cols or [])
+        self.spatial_units = spatial_units
+        self.spatial_weights = spatial_weights
+
+    def run(self, event_frame: EventFrame) -> EventFrame:
+        df = event_frame.collect()
+        _require_spatial_columns(df, self.neighbor_col, self.value_cols, self.group_cols)
+        _validate_spatial_values(df, self.neighbor_col, self.value_cols, self.group_cols)
+        lag_cols = [f"{col}_spatial_lag_r{ring}" for col in self.value_cols for ring in self.rings]
+        if df.is_empty():
+            return self._register_features(_empty_spatial_result(event_frame, lag_cols))
+        stats = _aggregate_stats(df, self.neighbor_col, self.value_cols, self.group_cols)
+        units = _grid_reference(
+            df, self.neighbor_col, self.spatial_units, stats[self.neighbor_col].to_list()
+        )
+        edges = _queen_ring_edges(units, self.neighbor_col, self.rings)
+        # One join + group_by per ring, not one over all rings at once: the
+        # intermediate is edges x snapshots, and the widest ring alone is
+        # already ~half of all edges, so rings are joined back one at a time
+        # to bound peak memory on Chicago-size panels.
+        out = df
+        for ring in self.rings:
+            ring_lag = _lag_means(
+                stats,
+                edges.filter(pl.col("ring") == ring).drop("ring"),
+                self.group_cols,
+                self.neighbor_col,
+                self.value_cols,
+            )
+            ring_lag = ring_lag.rename(
+                {col: f"{col}_spatial_lag_r{ring}" for col in self.value_cols}
+            )
+            out = out.join(
+                ring_lag,
+                on=[*self.group_cols, self.neighbor_col],
+                how="left",
+                validate="m:1",
+                maintain_order="left",
+            )
+        return self._register_features(event_frame.with_lazy_frame(out.lazy()))
+
+    def _register_features(self, result: EventFrame) -> EventFrame:
+        for col in self.value_cols:
+            for ring in self.rings:
+                out_col = f"{col}_spatial_lag_r{ring}"
+                result = result.register_feature(
+                    out_col,
+                    {"source_step": "MultiScaleSpatialLagStep"},
+                    provenance=FeatureProvenance(
+                        produced_by="MultiScaleSpatialLagStep",
+                        inputs=[col, self.neighbor_col],
+                        tags={"spatial"},
+                        metadata={
+                            "weights": "queen",
+                            "normalization": "row",
+                            "rings": self.rings,
+                            "ring": ring,
+                            "group_cols": self.group_cols,
+                            "islands": "null",
+                        },
+                    ),
+                )
         return result
 
 

@@ -67,6 +67,70 @@ rewriting the README.
 - **Custom exceptions**: none — everything raises `ValueError`,
   `ImportError` or `NotImplementedError` (audit objective 19).
 
+## Phase-2 scope reminders and new limitations (phase 2, 2026-11-15)
+
+- **No Hawkes fitting.** `HawkesExcitationStep` is a fixed-kernel
+  excitation feature (`E(t) = sum_{s<t} count(s) * exp(-(t-s)/tau)`); there
+  is no parameter estimation (no MLE for alpha/beta/mu), no
+  background/excitation separation, and no branching-ratio estimation.
+  The event-level `HawkesKernelStep` (alpha/beta/mu) is a separate,
+  model-flavoured step, not a fitted process either.
+- **No automatic bandwidth selection.** KDE/STKDE bandwidths are declared
+  explicitly by the caller. No Silverman rule, no likelihood
+  cross-validation — estimating a bandwidth on the full panel would be a
+  fitted statistic and a leakage surface; cross-validated selection
+  belongs to phase-4 evaluation.
+- **No KDE edge correction.** Density near the boundary of the observed
+  support is underestimated: neighbours outside the support do not exist.
+  The `KFunctionStep` translation correction is a point-pattern tool and
+  does not transfer to panel KDE.
+- **`KDEStep` is an approximation, not a KDE.** It counts neighbours
+  inside the bandwidth and divides by the buffer area; no kernel function
+  is applied. Its docstring now says so. Use `KernelDensityStep` for a
+  proper Gaussian KDE.
+- **Zone/areal supports still out of scope.** The phase-2 completion
+  contract extension covers multi-scale neighbourhoods and distance bands
+  over the completed panel's units only; areal data by zone is not a
+  panel support yet.
+- **Positional time windows.** `NearRepeatStep` and
+  `SpaceTimeKernelDensityStep` index time by per-unit bin position and
+  assume a regular, complete panel (one row per unit per bin, no gaps) —
+  the `CompletePanelStep` output. A gapped panel would silently misalign
+  the windows.
+- **One initial collect in the vectorized spatial steps.**
+  `SpatialLagStep` / `MultiScaleSpatialLagStep` collect the panel once to
+  validate values and build the edge list; the per-snapshot collects and
+  partitionings of phase 1 are gone. Measured on the Chicago replay
+  (6 GB VM, shared CPU — timings vary run to run): the single-scale lag
+  is 51.4 s → 6.2 s, the 3-ring multi-scale lag takes ~21 s inside the
+  replay, and the full 21-step pipeline takes ~98 s (was ~61 s in
+  phase 1 — the multi-scale saving roughly offsets the four new
+  families, whose joins dominate the new cost: KDE ~25 s, STKDE ~29 s,
+  near-repeat ~17 s). The original exit criterion (single-scale ≤ ~2 s,
+  total ≤ ~20 s) was **not** met on this VM; see the phase-2 design
+  note. The KDE/STKDE/near-repeat steps are eager, not lazy: each
+  collects its result before returning, one ring / one edge chunk at a
+  time, so the giant joins never run together at the final collect
+  (that combination OOM-killed the 6 GB VM twice during phase 2).
+  The KDE edge join is chunked (50k edges per chunk) for the same
+  reason. There is still no performance regression test in the suite
+  (audit objective 26).
+- **Performance now measured, no regression test yet.** Per-step timings
+  on the Chicago replay were measured in phase 2 (see
+  `audit/phase-2/manifest.json` and `docs/design-notes/phase2-spacetime-v2.md`).
+- **Time-column trap, fixed and guarded.** On the completed panel the
+  pre-completion `time_bin` column is null on every generated
+  (explicit-zero) row — only the schema timestamp column (`date` on
+  Chicago) holds the bin datetime on all rows. The phase-2 recipe
+  initially wired `NearRepeatStep` and `SpaceTimeKernelDensityStep` to
+  `time_bin` and both silently produced wrong values (near-repeat
+  ring-1 7 d = 60 instead of 50 on the busiest cell). The recipe now
+  passes the timestamp column, and all three steps reject a null time /
+  group column with a blocking `ValueError` (regression tests in
+  `tests/core/test_density_steps.py`,
+  `tests/core/test_near_repeat_steps.py`,
+  `tests/integration/test_chicago_pipeline.py`).
+
 ## Phase-0 scope reminders
 
 - Phase 0 implemented **no new features**: no lags, no rolling windows,

@@ -16,6 +16,7 @@ from eventflow.core.steps.spatial import (
     GridAggregationStep,
     KDEStep,
     LocalMoranStep,
+    MultiScaleSpatialLagStep,
     SpatialLagStep,
     TransformCRSStep,
 )
@@ -342,3 +343,36 @@ class TestTransformCRSStep:
         result = step.run(sample_event_frame)
 
         assert result.schema.context_requirements.spatial_crs == "EPSG:26971"
+
+
+class TestMultiScaleSpatialLagStep:
+    """Smoke tests for MultiScaleSpatialLagStep (full reference tests live in
+    tests/core/test_spatial_lag_vectorized.py)."""
+
+    def test_computes_ring_columns(self, gridded_event_frame: EventFrame) -> None:
+        """Test multi-scale lag computation with default rings 1-3."""
+        step = MultiScaleSpatialLagStep(value_cols=["value"], neighbor_col="grid_id")
+        result = step.run(gridded_event_frame)
+
+        df = result.collect()
+        assert "value_spatial_lag_r1" in df.columns
+        assert "value_spatial_lag_r2" in df.columns
+        assert "value_spatial_lag_r3" in df.columns
+
+    def test_ring1_matches_single_scale(self, gridded_event_frame: EventFrame) -> None:
+        """Test that ring 1 reproduces SpatialLagStep exactly."""
+        single = (
+            SpatialLagStep(value_cols=["value"], neighbor_col="grid_id")
+            .run(gridded_event_frame)
+            .collect()
+        )
+        multi = (
+            MultiScaleSpatialLagStep(value_cols=["value"], neighbor_col="grid_id")
+            .run(gridded_event_frame)
+            .collect()
+        )
+
+        a = single["value_spatial_lag"]
+        b = multi["value_spatial_lag_r1"]
+        assert a.is_null().to_list() == b.is_null().to_list()
+        assert ((a.fill_null(0.0) - b.fill_null(0.0)).abs() <= 1e-9).all()

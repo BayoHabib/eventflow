@@ -242,6 +242,12 @@ _FEATURE_KEYS = frozenset(
         "ewma_halflife_days",
         "cyclical_encoding",
         "spatial_lag",
+        "spatial_lag_rings",
+        "kde_bandwidth_m",
+        "stkde_bandwidth_m",
+        "stkde_halflife_days",
+        "near_repeat",
+        "hawkes_halflife_days",
         "trend",
         "recency",
         "zero_features",
@@ -370,9 +376,29 @@ class FeatureConfig(BaseModel):
       (``count_ewma_<halflife>d``). ``None`` (default) disables it.
     - ``cyclical_encoding``: sin/cos calendar encodings
       (``CalendarEncodingStep``, cyclical) for hour, day-of-week, month.
-    - ``spatial_lag``: queen-adjacency spatial lag of the shortest-window
-      lagged count (``count_lag_<shortest>_spatial_lag``). Requires
-      ``aggregation_windows``.
+    - ``spatial_lag``: multi-scale queen-ring spatial lag of the
+      shortest-window lagged count
+      (``count_lag_<shortest>_spatial_lag_r<r>`` for each ring in
+      ``spatial_lag_rings``). Requires ``aggregation_windows``.
+    - ``spatial_lag_rings``: queen rings for ``spatial_lag`` (default
+      ``[1, 2, 3]``); ring 1 reproduces the phase-1 single-scale lag.
+      Non-empty, unique, positive integers. Implemented in phase 2.
+    - ``kde_bandwidth_m``: Gaussian KDE bandwidth in metres, evaluated on
+      the shortest-window lagged count (``count_lag_<shortest>_kde``).
+      ``None`` (default) disables it. Requires ``aggregation_windows``.
+      Implemented in phase 2.
+    - ``stkde_bandwidth_m`` / ``stkde_halflife_days``: separable
+      space-time KDE (Gaussian in space, exponential decay in time) of
+      ``count`` (``count_stkde``). Both must be set together. Requires
+      ``complete_panel``. Implemented in phase 2.
+    - ``near_repeat``: near-repeat ring counts over trailing 7 d and
+      7-14 d windows (``count_nr_r<r>_7d`` / ``count_nr_r<r>_7_14d``) plus
+      the ``count_nr_event_7d`` flag. Requires ``complete_panel``.
+      Implemented in phase 2.
+    - ``hawkes_halflife_days``: fixed-kernel Hawkes excitation of ``count``
+      (``count_hawkes_<halflife>d``), strictly past bins only.
+      ``None`` (default) disables it. Requires ``complete_panel``.
+      Implemented in phase 2.
     - ``trend``: ratio of the shortest-window rolling mean to the
       longest-window one (``count_ma_<short>_vs_count_ma_<long>``).
       Requires at least two ``aggregation_windows``.
@@ -398,6 +424,12 @@ class FeatureConfig(BaseModel):
     ewma_halflife_days: float | None = Field(default=None, gt=0)
     cyclical_encoding: bool = False
     spatial_lag: bool = False
+    spatial_lag_rings: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    kde_bandwidth_m: float | None = Field(default=None, gt=0)
+    stkde_bandwidth_m: float | None = Field(default=None, gt=0)
+    stkde_halflife_days: float | None = Field(default=None, gt=0)
+    near_repeat: bool = False
+    hawkes_halflife_days: float | None = Field(default=None, gt=0)
     trend: bool = False
     recency: bool = False
     zero_features: bool = False
@@ -431,6 +463,22 @@ class FeatureConfig(BaseModel):
                 raise ValueError(f"Aggregation window {window!r} must be a whole number of days")
         return windows
 
+    @field_validator("spatial_lag_rings", mode="before")
+    @classmethod
+    def _validate_rings(cls, rings: object) -> object:
+        """Spatial lag rings must be non-empty, unique, positive integers.
+
+        Runs before coercion so a boolean (``True``) is rejected instead
+        of being silently coerced to ring 1.
+        """
+        if not isinstance(rings, list) or not rings:
+            raise ValueError("spatial_lag_rings must not be empty")
+        if any(not isinstance(r, int) or isinstance(r, bool) or r < 1 for r in rings):
+            raise ValueError("spatial_lag_rings must contain positive integers only")
+        if len(set(rings)) != len(rings):
+            raise ValueError("spatial_lag_rings must not contain duplicates")
+        return rings
+
     def window_days(self) -> list[int]:
         """Aggregation windows as whole days, ascending, de-duplicated."""
         return sorted({int(duration_seconds(w) // 86400) for w in self.aggregation_windows})
@@ -449,6 +497,15 @@ class FeatureConfig(BaseModel):
                 f"{recipe_name}: spatial_lag needs aggregation_windows "
                 "(the spatial lag is computed on the lagged count)"
             )
+        if self.kde_bandwidth_m is not None and not self.aggregation_windows:
+            raise ValueError(
+                f"{recipe_name}: kde_bandwidth_m needs aggregation_windows "
+                "(the KDE is evaluated on the shortest-window lagged count)"
+            )
+        if (self.stkde_bandwidth_m is None) != (self.stkde_halflife_days is None):
+            raise ValueError(
+                f"{recipe_name}: stkde_bandwidth_m and stkde_halflife_days " "must be set together"
+            )
         if self.trend and len(self.aggregation_windows) < 2:
             raise ValueError(
                 f"{recipe_name}: trend needs at least two aggregation_windows "
@@ -463,6 +520,12 @@ class FeatureConfig(BaseModel):
             )
             if enabled
         ]
+        if self.near_repeat:
+            needs_panel.append("near_repeat")
+        if self.hawkes_halflife_days is not None:
+            needs_panel.append("hawkes_halflife_days")
+        if self.stkde_bandwidth_m is not None:
+            needs_panel.append("stkde")
         if needs_panel and not self.complete_panel:
             raise ValueError(
                 f"{recipe_name}: {', '.join(needs_panel)} cannot be used "
