@@ -203,27 +203,44 @@ on CI, 0 failed), coverage 86% (CI run 98, 10/10), `make audit` PASS
 - [x] Optional downstream evaluation examples with task-appropriate metrics (PAI for hotspot ranking, PR-AUC for classification) — examples only, not universal preprocessing acceptance criteria
 - [x] Synthetic ground truth
 
-### Phase 5 — Library release
+### Phase 5 — Library release ✅ DONE (2026-11-15)
+
+Delivered (PR #48, merged 2026-11-15): adapter aliases as read-only
+properties (`attention_mask`, `inter_event_times`, `state_features`),
+old names kept working; `.data` on all 5 outputs, `feature_names`
+canonical; package builds from a clean checkout, `twine check` PASS
+(no upload performed — the maintainer decides the release moment);
+clean install verified from the wheel alone (`validate` 21 steps,
+quickstart 120 events → 516 rows); `examples/chicago_quickstart.py`
+executed by test; CHANGELOG.md 0.1.0 Alpha + `docs/release.md`;
+api_reference rewritten with 32 executing tests. 1,048 tests collected
+on CI (1,045 passed + 3 skipped, 0 failed), coverage 86% (CI run 100,
+10/10), `make audit` PASS 5/5; Chicago/Beijing/GeoLife replays
+unchanged; traceability 16 attained / 10 partial / 1 not attained
+(FastAPI, out of scope by the maintainer's decision) / 1 unverifiable.
 
 Covers the library's High Priority items below. Prediction services and
 trained models are optional downstream applications, with separate scope.
 
-- [ ] Adapter aliases (`attention_mask`, `inter_event_times`,
+- [x] Adapter aliases (`attention_mask`, `inter_event_times`,
   `state_features`)
-- [ ] PyPI publication (+ CHANGELOG.md)
-- [ ] Reproducible example environment (Docker if useful)
-- [ ] Docs
+- [x] PyPI publication (+ CHANGELOG.md) — package ready, `twine check`
+  PASS; upload itself not performed
+- [x] Reproducible example environment (Docker if useful) — clean install
+  + executable examples verified; Dockerfile added but not built (no
+  Docker in the VM)
+- [x] Docs
 
 ## 🔴 High Priority (Pre-Production)
 
 ### API Stability
-- [ ] **Standardize adapter output attribute names**
-  - [ ] `SequenceOutput.masks` → add alias `attention_mask` (HuggingFace/PyTorch convention)
-  - [ ] `StreamOutput.inter_times` → add alias `inter_event_times` (full name)
-  - [ ] `StreamOutput.states` → add alias `state_features` (consistent suffix)
-  - [ ] Decide on naming convention: `feature_names` vs `state_names` vs `channel_names`
-  
-- [ ] **Consistent main data attribute naming**
+- [x] **Standardize adapter output attribute names** (DONE in phase 5, PR #48)
+  - [x] `SequenceOutput.masks` → add alias `attention_mask` (HuggingFace/PyTorch convention)
+  - [x] `StreamOutput.inter_times` → add alias `inter_event_times` (full name)
+  - [x] `StreamOutput.states` → add alias `state_features` (consistent suffix)
+  - [x] Decide on naming convention: `feature_names` vs `state_names` vs `channel_names` — `feature_names` canonical
+
+- [x] **Consistent main data attribute naming** (DONE in phase 5, PR #48 — `.data` on all 5 outputs)
   | Adapter | Current | Proposed |
   |---------|---------|----------|
   | TableOutput | `data` | `data` ✓ |
@@ -233,15 +250,15 @@ trained models are optional downstream applications, with separate scope.
   | StreamOutput | `states` | `data` or keep |
 
 ### Library Distribution
-- [ ] **Publish to PyPI**
-  - [ ] Finalize version number (currently 0.1.0)
-  - [ ] Create CHANGELOG.md
-  - [ ] `python -m build && twine upload dist/*`
+- [x] **Publish to PyPI** (package ready in phase 5, PR #48 — `twine check` PASS; upload itself not performed, maintainer decides)
+  - [x] Finalize version number (currently 0.1.0)
+  - [x] Create CHANGELOG.md
+  - [ ] `python -m build && twine upload dist/*` — not performed
 
-- [ ] **Reproducible example environment**
-  - [ ] Document a clean installation and executable examples
-  - [ ] Add a Dockerfile for examples if needed; a prediction API is not a
-    prerequisite for releasing the library
+- [x] **Reproducible example environment** (DONE in phase 5, PR #48)
+  - [x] Document a clean installation and executable examples
+  - [x] Add a Dockerfile for examples if needed; a prediction API is not a
+    prerequisite for releasing the library — Dockerfile added, not built (no Docker in the VM)
 
 ## 🟡 Medium Priority (Post-MVP)
 
@@ -318,4 +335,4 @@ or validated production use cases of the preprocessing library.
 
 ---
 
-*Last updated: November 15, 2026 (phase 4 DONE — PR #46 merged, 991 tests, 86%; blocked splits + walk-forward + fitted-statistics freeze + synthetic ground truth; target encoding N/A)*
+*Last updated: November 15, 2026 (all phases 0–5 DONE — PR #48 merged, 1,048 tests, 86%; library release-ready, PyPI upload not performed)*
