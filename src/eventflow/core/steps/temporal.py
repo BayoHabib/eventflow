@@ -968,8 +968,23 @@ def _validate_periods(periods: Sequence[int], mode: str) -> None:
 
 
 def _validate_time_keys(lf: pl.LazyFrame, keys: list[str]) -> None:
-    data = lf.select(keys).collect()
-    if any(data[col].null_count() for col in keys):
+    """Reject null or duplicated temporal keys without materializing them.
+
+    A single one-row aggregation (per-key null counts plus a duplicate
+    flag) replaces the former full-column collect: the check used to pull
+    every key value into memory only to count nulls and look for
+    duplicates (issue #39). The errors raised, and the order in which
+    they fire, are unchanged.
+    """
+    checks = (
+        lf.select(
+            *[pl.col(key).null_count().alias(f"__null_{key}") for key in keys],
+            pl.struct(keys).is_duplicated().any().alias("__has_duplicates"),
+        )
+        .collect()
+        .row(0, named=True)
+    )
+    if any(checks[f"__null_{key}"] for key in keys):
         raise ValueError("Temporal keys cannot contain nulls")
-    if data.is_duplicated().any():
+    if checks["__has_duplicates"]:
         raise ValueError("Duplicate temporal keys: aggregate or disambiguate each group/time first")
