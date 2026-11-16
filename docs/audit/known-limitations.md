@@ -225,6 +225,15 @@ rewriting the README.
   the audit replay only checks null `count`, not null `time_bin`. The
   Phase 2 fix (NearRepeat/STKDE wired to the schema timestamp column)
   already accounts for this; a library-level fix is a separate task.
+- **Evaluation splits now refuse nullable split columns (demo findings,
+  2026-11-16).** Splitting the completed panel on `time_bin` silently
+  kept 2.9% of the rows and reported a perfect, meaningless PR-AUC of
+  1.0. `temporal_split`, `blocked_split`, `spatial_split`,
+  `entity_split`, `partition_units`, `validate_split` and
+  `walk_forward_splits` now raise a blocking `ValueError` naming the
+  null count when the split column contains nulls, and the evaluation
+  API accepts collected DataFrames (converted with `.lazy()`). Panel
+  semantics are unchanged: generated rows still carry a null `time_bin`.
 - **Audit manifest label still stale.** `scripts/audit.py` labels its
   manifest "eventflow phase-1 audit" although the numbers are the
   phase-5 run's (same staleness noted in phases 3 and 4).

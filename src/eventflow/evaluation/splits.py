@@ -18,8 +18,18 @@ producing a degenerate split (empty side, unknown unit, unparseable time
 column). ``validate_split`` is the negative control: a deliberately
 leaking split MUST be rejected by it.
 
-All functions accept either a ``polars.LazyFrame`` or an ``EventFrame``
-and return the same kind they were given.
+All functions accept a ``polars.LazyFrame``, an ``EventFrame``, or a
+collected ``polars.DataFrame`` (converted with ``.lazy()`` — cheap, no
+data copy) and return the same kind they were given.
+
+Splitting on a column that contains nulls is refused loudly: a null
+cannot belong to either side of a comparison or membership filter, so
+those rows would be silently dropped (temporal split) or silently
+assigned to train (spatial/entity split). On the completed Chicago
+panel, for example, ``time_bin`` is null on all 1,851,597 explicit-zero
+rows — splitting on it keeps 2.9% of the frame and reports a perfect,
+meaningless PR-AUC of 1.0. Use a column with no nulls instead (the
+schema timestamp column, ``date`` on Chicago).
 """
 
 from __future__ import annotations
@@ -33,22 +43,59 @@ import polars as pl
 
 from eventflow.core.event_frame import EventFrame
 
-FrameLike = pl.LazyFrame | EventFrame
-T = TypeVar("T", pl.LazyFrame, EventFrame)
+FrameLike = pl.LazyFrame | EventFrame | pl.DataFrame
+T = TypeVar("T", pl.LazyFrame, EventFrame, pl.DataFrame)
 
 
 def _as_lazy(frame: FrameLike) -> pl.LazyFrame:
-    """Return the underlying LazyFrame of *frame*."""
+    """Return the underlying LazyFrame of *frame*.
+
+    A collected DataFrame is converted with ``.lazy()`` (cheap, no data
+    copy); anything else raises a clear TypeError instead of failing
+    later with a cryptic AttributeError.
+    """
     if isinstance(frame, EventFrame):
         return frame.lazy_frame
-    return frame
+    if isinstance(frame, pl.DataFrame):
+        return frame.lazy()
+    if isinstance(frame, pl.LazyFrame):
+        return frame
+    raise TypeError("expected a LazyFrame, EventFrame or DataFrame, " f"got {type(frame).__name__}")
 
 
 def _reattach(frame: T, lazy: pl.LazyFrame) -> T:
     """Wrap *lazy* in the same container type *frame* came in."""
     if isinstance(frame, EventFrame):
         return frame.with_lazy_frame(lazy)  # type: ignore[return-value]
+    if isinstance(frame, pl.DataFrame):
+        return lazy.collect()  # type: ignore[return-value]
     return lazy  # type: ignore[return-value]
+
+
+def _require_no_nulls(lazy: pl.LazyFrame, column: str, *, where: str) -> None:
+    """Raise if *column* contains nulls.
+
+    A null cannot belong to either side of a comparison or membership
+    filter, so splitting on a nullable column silently drops those rows
+    (temporal split) or silently assigns them all to train
+    (spatial/entity split). The check is one 1-row aggregation, the same
+    pattern as the lazy-validation fix of issue #39.
+    """
+    n_total, n_null = (
+        lazy.select(
+            pl.len().alias("n_total"),
+            pl.col(column).is_null().sum().alias("n_null"),
+        )
+        .collect()
+        .row(0)
+    )
+    if n_null:
+        raise ValueError(
+            f"{where}: column {column!r} contains {n_null:,} null value(s) out of "
+            f"{n_total:,} rows; splitting on it would silently drop or misassign "
+            f"those rows — split on a column with no null values instead "
+            f"(e.g. the schema timestamp column)"
+        )
 
 
 def _require_column(lazy: pl.LazyFrame, column: str, *, where: str) -> None:
@@ -117,12 +164,14 @@ def temporal_split(
     a look-back window cannot read across the boundary.
 
     Raises:
-        ValueError: missing/non-temporal time column, cutoff of the wrong
-            type, negative gap, or an empty train or test side.
+        ValueError: missing/non-temporal time column, a time column
+            containing nulls, cutoff of the wrong type, negative gap,
+            or an empty train or test side.
     """
     where = "temporal_split"
     lazy = _as_lazy(frame)
     dtype = _require_temporal_column(lazy, time_col, where=where)
+    _require_no_nulls(lazy, time_col, where=where)
     _require_matching_cutoff(dtype, cutoff, where=where)
     embargo = _require_gap(gap, where=where)
 
@@ -143,6 +192,7 @@ def _partition_by_values(
     """Split on set membership in *column*; shared by spatial/entity splits."""
     lazy = _as_lazy(frame)
     _require_column(lazy, column, where=where)
+    _require_no_nulls(lazy, column, where=where)
     test_set = set(test_values)
     if not test_set:
         raise ValueError(f"{where}: test set must not be empty")
@@ -169,8 +219,9 @@ def spatial_split(frame: T, unit_col: str, test_units: Iterable[Any]) -> tuple[T
     rows go to train. No unit appears on both sides.
 
     Raises:
-        ValueError: missing unit column, empty test set, unknown test unit,
-            or a test set covering every unit.
+        ValueError: missing unit column, a unit column containing nulls,
+            empty test set, unknown test unit, or a test set covering
+            every unit.
     """
     return _partition_by_values(frame, unit_col, test_units, where="spatial_split")
 
@@ -182,8 +233,9 @@ def entity_split(frame: T, entity_col: str, test_entities: Iterable[Any]) -> tup
     other rows go to train. No entity appears on both sides.
 
     Raises:
-        ValueError: missing entity column, empty test set, unknown test
-            entity, or a test set covering every entity.
+        ValueError: missing entity column, an entity column containing
+            nulls, empty test set, unknown test entity, or a test set
+            covering every entity.
     """
     return _partition_by_values(frame, entity_col, test_entities, where="entity_split")
 
@@ -205,12 +257,14 @@ def partition_units(
         ``(train_units, test_units)`` as sorted lists of unit values.
 
     Raises:
-        ValueError: missing unit column, ``test_fraction`` outside (0, 1),
-            or fewer than two distinct units.
+        ValueError: missing unit column, a unit column containing nulls,
+            ``test_fraction`` outside (0, 1), or fewer than two distinct
+            units.
     """
     where = "partition_units"
     lazy = _as_lazy(frame)
     _require_column(lazy, unit_col, where=where)
+    _require_no_nulls(lazy, unit_col, where=where)
     if not 0.0 < test_fraction < 1.0:
         raise ValueError(f"{where}: test_fraction must be in (0, 1), got {test_fraction!r}")
     units = sorted(_distinct_values(lazy, unit_col), key=repr)
@@ -244,7 +298,8 @@ def validate_split(
 
     Raises:
         ValueError: no blocking column supplied, a column missing from
-            either side, or any shared value.
+            either side, a checked column containing nulls on either
+            side, or any shared value.
     """
     checks = (
         ("time bin", time_col),
@@ -259,6 +314,8 @@ def validate_split(
             continue
         _require_column(train_lazy, col, where="validate_split (train)")
         _require_column(test_lazy, col, where="validate_split (test)")
+        _require_no_nulls(train_lazy, col, where="validate_split (train)")
+        _require_no_nulls(test_lazy, col, where="validate_split (test)")
         shared = _distinct_values(train_lazy, col) & _distinct_values(test_lazy, col)
         if shared:
             sample = sorted(map(repr, shared))[:5]
@@ -294,11 +351,13 @@ def blocked_split(
 
     Raises:
         ValueError: same input errors as the single-dimension splitters,
-            no blocking column supplied, or an empty train or test side.
+            a split column containing nulls, no blocking column supplied,
+            or an empty train or test side.
     """
     where = "blocked_split"
     lazy = _as_lazy(frame)
     dtype = _require_temporal_column(lazy, time_col, where=where)
+    _require_no_nulls(lazy, time_col, where=where)
     _require_matching_cutoff(dtype, cutoff, where=where)
     embargo = _require_gap(gap, where=where)
 
@@ -323,6 +382,7 @@ def blocked_split(
             if values is None:
                 raise ValueError(f"{where}: {col!r} supplied without test {label}s")
             _require_column(lazy, col, where=where)
+            _require_no_nulls(lazy, col, where=where)
             value_set = set(values)
             if not value_set:
                 raise ValueError(f"{where}: test {label} set must not be empty")
