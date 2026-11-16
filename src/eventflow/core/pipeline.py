@@ -4,7 +4,7 @@ import asyncio
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any
+from typing import Any, Protocol
 
 from eventflow.core._async import run_blocking
 from eventflow.core.event_frame import EventFrame
@@ -34,6 +34,20 @@ class Step(ABC):
     def __repr__(self) -> str:
         """String representation of the step."""
         return f"{self.__class__.__name__}()"
+
+
+class FittableStep(Protocol):
+    """A step that learns fitted statistics from one frame and freezes them.
+
+    ``fit`` learns from the given frame only. ``run`` after ``fit`` must use the
+    frozen statistics, never re-learn from the run frame. ``is_fitted``
+    reports whether fitted statistics are held.
+    """
+
+    def fit(self, event_frame: EventFrame) -> "FittableStep": ...
+
+    @property
+    def is_fitted(self) -> bool: ...
 
 
 class AsyncStep(Step):
