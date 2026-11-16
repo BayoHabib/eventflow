@@ -3,17 +3,17 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "eventflow"
+name = "shikong"
 version = "0.1.0"
 description = "A high-performance, generic spatio-temporal event transformation engine"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-# Author email deliberately omitted: team@eventflow.dev is not a real
-# contact address. The maintainer should add a real contact email here
-# before the first PyPI upload (see docs/release.md).
+# Author email deliberately omitted: there is no real contact address
+# yet. The maintainer should add a real contact email here before the
+# first PyPI upload (see docs/release.md).
 authors = [
-    {name = "EventFlow Team"}
+    {name = "Shikong Team"}
 ]
 keywords = ["spatio-temporal", "events", "mlops", "feature-engineering"]
 classifiers = [
@@ -63,11 +63,11 @@ tracking = [
     "mlflow>=2.8.0",
 ]
 all = [
-    "eventflow[dev,tracking]",
+    "shikong[dev,tracking]",
 ]
 
 [project.scripts]
-eventflow = "eventflow.cli.main:app"
+shikong = "shikong.cli.main:app"
 
 [project.urls]
 Homepage = "https://github.com/BayoHabib/eventflow"
@@ -158,7 +158,7 @@ addopts = [
     "-v",
     "--strict-markers",
     "--strict-config",
-    "--cov=eventflow",
+    "--cov=shikong",
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",

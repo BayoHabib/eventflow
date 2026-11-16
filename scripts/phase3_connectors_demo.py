@@ -45,12 +45,12 @@ from pathlib import Path
 
 import polars as pl
 
-from eventflow.core.context import TabularFileSource
-from eventflow.core.event_frame import EventFrame
-from eventflow.core.schema import EventMetadata, EventSchema
-from eventflow.core.steps.context import TemporalContextJoinStep
-from eventflow.datasets.beijing_air_quality.schema import STATION_COORDS
-from eventflow.datasets.geolife.loader import load_geolife
+from shikong.core.context import TabularFileSource
+from shikong.core.event_frame import EventFrame
+from shikong.core.schema import EventMetadata, EventSchema
+from shikong.core.steps.context import TemporalContextJoinStep
+from shikong.datasets.beijing_air_quality.schema import STATION_COORDS
+from shikong.datasets.geolife.loader import load_geolife
 
 VALUE_COLS = ["TEMP", "PRES", "DEWP", "WSPM"]
 TOLERANCE = "1h"
@@ -254,7 +254,7 @@ def main() -> None:
     report = {
         "criterion": "phase 3, exit criterion 5 (external connectors)",
         "connector": {
-            "class": "eventflow.core.context.TabularFileSource",
+            "class": "shikong.core.context.TabularFileSource",
             "source_file": args.beijing_parquet,
             "timestamp_col": "timestamp",
             "key_cols": ["station"],

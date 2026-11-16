@@ -31,27 +31,27 @@ from pathlib import Path
 import polars as pl
 from pyproj import Transformer
 
-from eventflow.core.pipeline import Pipeline
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.steps.categorical import CategoryCountsStep
-from eventflow.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
-from eventflow.core.steps.dynamics import (
+from shikong.core.pipeline import Pipeline
+from shikong.core.schema import RecipeConfig
+from shikong.core.steps.categorical import CategoryCountsStep
+from shikong.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
+from shikong.core.steps.dynamics import (
     BurstinessStep,
     EWMAMeanStep,
     TimeSinceLastEventStep,
     ZeroFeaturesStep,
 )
-from eventflow.core.steps.hawkes import HawkesExcitationStep
-from eventflow.core.steps.near_repeat import NearRepeatStep
-from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep, TransformCRSStep
-from eventflow.core.steps.temporal import (
+from shikong.core.steps.hawkes import HawkesExcitationStep
+from shikong.core.steps.near_repeat import NearRepeatStep
+from shikong.core.steps.panel import CompletePanelStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep, TransformCRSStep
+from shikong.core.steps.temporal import (
     FillNullStep,
     RecencyWeightStep,
     TemporalLagStep,
 )
-from eventflow.datasets.geolife.loader import load_geolife
-from eventflow.datasets.geolife.recipes.geolife_v1 import (
+from shikong.datasets.geolife.loader import load_geolife
+from shikong.datasets.geolife.recipes.geolife_v1 import (
     TRAJECTORY_GROUP_COLS,
     GeoLifeV1Recipe,
 )

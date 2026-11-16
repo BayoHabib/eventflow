@@ -28,22 +28,22 @@ from pathlib import Path
 
 import polars as pl
 
-from eventflow.core.schema import RecipeConfig
-from eventflow.core.steps.panel import CompletePanelStep
-from eventflow.core.steps.temporal import (
+from shikong.core.schema import RecipeConfig
+from shikong.core.steps.panel import CompletePanelStep
+from shikong.core.steps.temporal import (
     CalendarEncodingStep,
     ExtractTemporalComponentsStep,
     MovingAverageStep,
     TemporalLagStep,
     TimeBinsStep,
 )
-from eventflow.datasets.beijing_air_quality.mapping import load_beijing_air_quality
-from eventflow.datasets.beijing_air_quality.recipes.beijing_air_quality_v1 import (
+from shikong.datasets.beijing_air_quality.mapping import load_beijing_air_quality
+from shikong.datasets.beijing_air_quality.recipes.beijing_air_quality_v1 import (
     LAG_HOURS,
     ROLLING_WINDOW_HOURS,
     BeijingAirQualityV1Recipe,
 )
-from eventflow.datasets.beijing_air_quality.schema import MEASUREMENT_COLS, POLLUTANT_COLS
+from shikong.datasets.beijing_air_quality.schema import MEASUREMENT_COLS, POLLUTANT_COLS
 
 WORK = Path(__file__).resolve().parent.parent
 PHASE3 = Path.home() / "workspace" / "eventflow-eda" / "phase3"

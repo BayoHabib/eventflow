@@ -4,7 +4,7 @@ Example script for running an experiment with tracking.
 
 This script demonstrates how to:
 1. Set up experiment tracking (MLflow)
-2. Load and process data with eventflow
+2. Load and process data with shikong
 3. Train a model (placeholder)
 4. Log parameters, metrics, and artifacts
 """
@@ -18,14 +18,14 @@ import yaml  # type: ignore[import-untyped]
 # Add src to path for development
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from eventflow.core.schema import DatasetConfig, RecipeConfig
-from eventflow.tracking.mlflow_tracker import MLflowTracker
+from shikong.core.schema import DatasetConfig, RecipeConfig
+from shikong.tracking.mlflow_tracker import MLflowTracker
 
 
 def main() -> None:
     """Main execution function."""
     print("=" * 60)
-    print("Eventflow Experiment Runner with MLflow Tracking")
+    print("Shikong Experiment Runner with MLflow Tracking")
     print("=" * 60)
 
     # Initialize MLflow tracker

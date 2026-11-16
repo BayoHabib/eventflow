@@ -1,13 +1,13 @@
-# Eventflow Project - Getting Started
+# Shikong Project - Getting Started
 
-Welcome to **Eventflow**, a high-performance, generic spatio-temporal event transformation engine!
+Welcome to **Shikong**, a high-performance, generic spatio-temporal event transformation engine!
 
 ## Project Structure Created
 
-The complete Eventflow project has been set up with the following structure:
+The complete Shikong project has been set up with the following structure:
 
 ```
-eventflow/
+shikong/
 ├── pyproject.toml           # Project configuration and dependencies
 ├── README.md                # Main documentation
 ├── LICENSE                  # MIT License
@@ -27,7 +27,7 @@ eventflow/
 │   ├── datasets.md          # Dataset documentation
 │   ├── design-notes/        # Phase 1-4 design notes
 │   └── audit/               # Audit evidence and known limitations
-├── src/eventflow/
+├── src/shikong/
 │   ├── __init__.py
 │   ├── core/               # Generic engine (dataset-agnostic)
 │   │   ├── schema.py       # Schema definitions
@@ -94,14 +94,14 @@ eventflow/
 Navigate to the project directory and install in development mode:
 
 ```powershell
-cd eventflow
+cd shikong
 pip install -e ".[dev]"
 ```
 
 This will install:
 - Core dependencies: polars, pydantic, shapely, pyproj, typer, pyyaml
 - Development tools: pytest, black, ruff, mypy, pre-commit
-- Optional: Install MLflow with `pip install eventflow[tracking]`
+- Optional: Install MLflow with `pip install shikong[tracking]`
 
 ### 2. Set Up Pre-commit Hooks
 
@@ -120,23 +120,23 @@ pytest
 Or with coverage:
 
 ```powershell
-pytest --cov=eventflow --cov-report=html
+pytest --cov=shikong --cov-report=html
 ```
 
 ### 4. Try the CLI
 
 ```powershell
 # List available datasets
-python -m eventflow.cli.main list-datasets
+python -m shikong.cli.main list-datasets
 
 # List recipes
-python -m eventflow.cli.main list-recipes
+python -m shikong.cli.main list-recipes
 
 # Validate a config
-python -m eventflow.cli.main validate --config configs/recipes/chicago_crime_v1.yaml
+python -m shikong.cli.main validate --config configs/recipes/chicago_crime_v1.yaml
 
 # Check version
-python -m eventflow.cli.main version
+python -m shikong.cli.main version
 ```
 
 ### 5. Run Example Scripts
@@ -205,7 +205,7 @@ python scripts/run_experiment.py
 
 ### Adding a New Dataset
 
-1. Create package: `src/eventflow/datasets/your_dataset/`
+1. Create package: `src/shikong/datasets/your_dataset/`
 2. Define schema in `schema.py`
 3. Implement loader in `mapping.py`
 4. Add context sources in `context/`

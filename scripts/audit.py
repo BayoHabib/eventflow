@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-command audit for EventFlow (phase 0).
+"""One-command audit for Shikong (phase 0).
 
 Runs, in order: ruff, black --check, mypy, the full test suite with
 coverage (which includes the README Quick Start examples), and a replay
@@ -108,10 +108,10 @@ def dependency_versions() -> dict[str, str]:
             versions[name] = "NOT INSTALLED"
     # The version of the tree being audited — read from pyproject.toml,
     # never from an installed copy (which may point at another tree).
-    versions["eventflow"] = "unknown"
+    versions["shikong"] = "unknown"
     for line in (ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
         if line.startswith("version = "):
-            versions["eventflow"] = line.split('"')[1]
+            versions["shikong"] = line.split('"')[1]
             break
     return versions
 
@@ -139,7 +139,7 @@ def replay_chicago(out_dir: Path, data_root: Path, env: dict[str, str]) -> tuple
         [
             sys.executable,
             "-m",
-            "eventflow.cli.main",
+            "shikong.cli.main",
             "run",
             "--dataset",
             "chicago_crime",
@@ -244,7 +244,7 @@ def main() -> int:
             "no:cacheprovider",
             "-o",
             "addopts=",
-            "--cov=eventflow",
+            "--cov=shikong",
             "--cov-report=term",
             f"--cov-report=xml:{out_dir / 'coverage.xml'}",
         ],
@@ -267,7 +267,7 @@ def main() -> int:
 
     verdict = compute_verdict(results)
     manifest = {
-        "audit": "eventflow phase-1 audit",
+        "audit": "shikong phase-1 audit",
         "started_utc": started.isoformat(),
         "finished_utc": datetime.now(timezone.utc).isoformat(),
         "repo_root": str(ROOT),

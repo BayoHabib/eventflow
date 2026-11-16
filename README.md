@@ -1,4 +1,4 @@
-# EventFlow
+# Shikong
 
 [![Test & Lint](https://github.com/BayoHabib/eventflow/actions/workflows/ci.yml/badge.svg)](https://github.com/BayoHabib/eventflow/actions)
 [![Coverage](https://img.shields.io/badge/coverage-86%25-yellow.svg)](https://github.com/BayoHabib/eventflow)
@@ -41,7 +41,7 @@ caller-supplied footprints and exclusions, optional event filtering, and geometr
 cell coverage with provenance. It works with arbitrary EventFrame schemas and
 introduces no default geographical or application-specific exclusions.
 
-EventFlow transforms raw event data (crime records, sensor readings, transactions, etc.) into **ML-ready formats** for various model architectures:
+Shikong transforms raw event data (crime records, sensor readings, transactions, etc.) into **ML-ready formats** for various model architectures:
 
 | Adapter | Output Format | Target Models |
 |---------|---------------|---------------|
@@ -61,9 +61,9 @@ EventFlow transforms raw event data (crime records, sensor readings, transaction
 - 🧪 **Composable pipelines** - registry-based step system
 - ✅ **Validated** - 1,046 tests passing, 86% coverage (measured 2026-11-16; see `docs/audit/`)
 
-## What EventFlow does not do
+## What Shikong does not do
 
-- **No model training and no prediction serving.** EventFlow prepares
+- **No model training and no prediction serving.** Shikong prepares
   ML-ready features; models live downstream (e.g. `chicago_crime_api`).
 - **Per-category and rolling-window features are opt-in, not default.**
   `CategoryCountsStep`, `TemporalLagStep`, `MovingAverageStep` and the
@@ -87,7 +87,7 @@ EventFlow transforms raw event data (crime records, sensor readings, transaction
 ```bash
 # From source (PyPI coming soon)
 git clone https://github.com/BayoHabib/eventflow.git
-cd eventflow
+cd shikong
 pip install -e ".[dev]"
 ```
 
@@ -99,7 +99,7 @@ Run the packaged Chicago recipe directly on downloaded CSV or Parquet chunks:
 pip install "chicago-crime-downloader[parquet]"
 chicago-crime-dl --mode daily --start-date 2020-01-10 --end-date 2020-01-10 \
   --out-root data/raw/chicago_crime --out-format parquet
-eventflow run --dataset chicago_crime --recipe chicago_crime_v1 \
+shikong run --dataset chicago_crime --recipe chicago_crime_v1 \
   --config configs/recipes/chicago_crime_v1.yaml \
   --input data/raw/chicago_crime --output data/processed/chicago_features.parquet
 ```
@@ -138,7 +138,7 @@ graph adapters work from a `grid_id` column of `"row_col"` strings (e.g.
 
 ```python
 import polars as pl
-from eventflow.core.adapters import (
+from shikong.core.adapters import (
     TableAdapter, TableAdapterConfig,
     SequenceAdapter, SequenceAdapterConfig,
     RasterAdapter, RasterAdapterConfig,
@@ -211,12 +211,12 @@ stream_output = stream_adapter.convert(df)
 
 ## Pipeline Steps
 
-EventFlow provides composable pipeline steps for feature engineering
-(every name below is importable from `eventflow.core.steps` — the list is
+Shikong provides composable pipeline steps for feature engineering
+(every name below is importable from `shikong.core.steps` — the list is
 checked by `tests/test_readme_examples.py`):
 
 ```python
-from eventflow.core.steps import (
+from shikong.core.steps import (
     # Temporal
     TimeBinsStep, ExtractTemporalComponentsStep, CalendarEncodingStep,
     TemporalLagStep, MovingAverageStep, FillNullStep,
@@ -243,12 +243,12 @@ from eventflow.core.steps import (
     ObservationPanelStep,
 )
 # Phase-2 steps are registered but not re-exported from
-# eventflow.core.steps — import them from their own modules:
-from eventflow.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
-from eventflow.core.steps.hawkes import HawkesExcitationStep
-from eventflow.core.steps.near_repeat import NearRepeatStep
-from eventflow.core.steps.spatial import MultiScaleSpatialLagStep
-from eventflow.core.steps.validation import (
+# shikong.core.steps — import them from their own modules:
+from shikong.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
+from shikong.core.steps.hawkes import HawkesExcitationStep
+from shikong.core.steps.near_repeat import NearRepeatStep
+from shikong.core.steps.spatial import MultiScaleSpatialLagStep
+from shikong.core.steps.validation import (
     validate_temporal_ordering,
     validate_point_process_features,
 )
@@ -257,8 +257,8 @@ from eventflow.core.steps.validation import (
 ## Project Structure
 
 ```
-eventflow/
-├── src/eventflow/
+shikong/
+├── src/shikong/
 │   ├── core/
 │   │   ├── adapters/      # Multi-modal output adapters
 │   │   │   ├── table.py   # TableAdapter for DataFrames
@@ -325,7 +325,7 @@ See [`notebooks/demo_chicago_crime.ipynb`](notebooks/demo_chicago_crime.ipynb) f
 ```bash
 # Clone the repository
 git clone https://github.com/BayoHabib/eventflow.git
-cd eventflow
+cd shikong
 
 # Install in development mode
 pip install -e ".[dev]"
@@ -334,7 +334,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 
 # Run with coverage
-pytest tests/ --cov=src/eventflow --cov-report=html
+pytest tests/ --cov=src/shikong --cov-report=html
 
 # Linting
 ruff check src tests
@@ -372,8 +372,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Citation
 
 ```bibtex
-@software{eventflow2025,
-  title = {EventFlow: A Generic Spatio-Temporal Event Transformation Engine},
+@software{shikong2025,
+  title = {Shikong: A Generic Spatio-Temporal Event Transformation Engine},
   author = {Habib Bayo},
   year = {2025},
   url = {https://github.com/BayoHabib/eventflow}
