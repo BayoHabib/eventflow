@@ -36,6 +36,10 @@ class SequenceOutput:
         lengths: Original lengths before padding
         time_encoding: Optional time position encodings
         dtypes: Data type information
+
+    Aliases (Phase 5, read-only properties returning the same array object):
+        attention_mask: Alias for ``masks`` (HuggingFace/PyTorch convention).
+        data: Alias for ``sequences`` — the main payload, uniform across adapters.
     """
 
     sequences: np.ndarray
@@ -50,6 +54,22 @@ class SequenceOutput:
     def n_sequences(self) -> int:
         """Number of sequences."""
         return int(self.sequences.shape[0])
+
+    @property
+    def attention_mask(self) -> np.ndarray:
+        """Alias for :attr:`masks` (HuggingFace/PyTorch convention).
+
+        Returns the identical array object as ``masks``; read-only.
+        """
+        return self.masks
+
+    @property
+    def data(self) -> np.ndarray:
+        """Alias for :attr:`sequences` — the main payload of this output.
+
+        Uniform ``.data`` accessor shared by all adapter outputs; read-only.
+        """
+        return self.sequences
 
     @property
     def max_length(self) -> int:
@@ -69,6 +89,8 @@ class SequenceOutput:
             result: dict[str, Any] = {
                 "sequences": torch.from_numpy(self.sequences),
                 "masks": torch.from_numpy(self.masks),
+                # Alias keys kept alongside the originals (Phase 5 naming).
+                "attention_mask": torch.from_numpy(self.attention_mask),
                 "lengths": torch.from_numpy(self.lengths),
             }
             if self.time_encoding is not None:
@@ -259,7 +281,11 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
             feature_names=feature_cols,
             lengths=lengths,
             time_encoding=time_encoding,
-            dtypes={"sequences": str(np_dtype), "masks": "bool"},
+            dtypes={
+                "sequences": str(np_dtype),
+                "masks": "bool",
+                "attention_mask": "bool",  # Alias key (Phase 5 naming).
+            },
         )
 
     def get_metadata(self, output: SequenceOutput) -> AdapterMetadata:
@@ -267,6 +293,8 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
         shapes = {
             "sequences": output.sequences.shape,
             "masks": output.masks.shape,
+            # Alias keys kept alongside the originals (Phase 5 naming).
+            "attention_mask": output.attention_mask.shape,
             "lengths": output.lengths.shape,
         }
         if output.time_encoding is not None:
@@ -301,6 +329,8 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
             save_dict: dict[str, np.ndarray] = {
                 "sequences": output.sequences,
                 "masks": output.masks,
+                # Alias key stored alongside the original (Phase 5 naming).
+                "attention_mask": output.attention_mask,
                 "lengths": output.lengths,
                 "feature_names": np.array(output.feature_names),
                 "sequence_ids": np.array(output.sequence_ids),
@@ -355,9 +385,12 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
         if fmt == SerializationFormat.NUMPY:
             loaded = np.load(path, allow_pickle=True)
             time_enc = loaded.get("time_encoding")
+            # Accept the new key if present, fall back to the original key
+            # so files written before the Phase 5 alias still load.
+            masks = loaded["attention_mask"] if "attention_mask" in loaded else loaded["masks"]
             return SequenceOutput(
                 sequences=loaded["sequences"],
-                masks=loaded["masks"],
+                masks=masks,
                 lengths=loaded["lengths"],
                 feature_names=list(loaded["feature_names"]),
                 sequence_ids=list(loaded["sequence_ids"]),
@@ -370,9 +403,10 @@ class SequenceAdapter(BaseModalityAdapter[SequenceOutput]):
 
                 data = torch.load(path, weights_only=False)
                 time_enc = data.get("time_encoding")
+                masks = data.get("attention_mask", data.get("masks"))
                 return SequenceOutput(
                     sequences=data["sequences"].numpy(),
-                    masks=data["masks"].numpy(),
+                    masks=masks.numpy(),
                     lengths=data["lengths"].numpy(),
                     feature_names=data["feature_names"],
                     sequence_ids=data["sequence_ids"],

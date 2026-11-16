@@ -36,6 +36,9 @@ class RasterOutput:
         grid_shape: (height, width) of the spatial grid
         channel_first: Whether channels are first dimension
         dtypes: Data type information
+
+    Aliases (Phase 5, read-only property returning the same array object):
+        data: Alias for ``raster`` — the main payload, uniform across adapters.
     """
 
     raster: np.ndarray
@@ -49,6 +52,14 @@ class RasterOutput:
     def n_timesteps(self) -> int:
         """Number of time steps."""
         return int(self.raster.shape[0])
+
+    @property
+    def data(self) -> np.ndarray:
+        """Alias for :attr:`raster` — the main payload of this output.
+
+        Uniform ``.data`` accessor shared by all adapter outputs; read-only.
+        """
+        return self.raster
 
     @property
     def n_channels(self) -> int:

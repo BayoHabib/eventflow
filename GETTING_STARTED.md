@@ -23,8 +23,10 @@ eventflow/
 │       └── chicago_crime_v1.yaml
 ├── docs/
 │   ├── architecture.md      # Architecture documentation
-│   ├── api_reference.md     # API reference
-│   └── datasets.md          # Dataset documentation
+│   ├── api_reference.md     # API reference (every example executed by tests)
+│   ├── datasets.md          # Dataset documentation
+│   ├── design-notes/        # Phase 1-4 design notes
+│   └── audit/               # Audit evidence and known limitations
 ├── src/eventflow/
 │   ├── __init__.py
 │   ├── core/               # Generic engine (dataset-agnostic)
@@ -35,20 +37,27 @@ eventflow/
 │   │   ├── features.py     # Feature engineering (partly experimental, phase 0)
 │   │   ├── pipeline.py     # Pipeline orchestration
 │   │   ├── utils.py        # Utilities
+│   │   ├── steps/          # Pipeline steps (temporal, spatial, panel,
+│   │   │                   # dynamics, categorical, density, near-repeat,
+│   │   │                   # Hawkes, point process, streaming, validation)
 │   │   └── context/        # Context enrichment
 │   │       ├── sources.py
 │   │       ├── joiners.py
-│   │       └── enricher.py
+│   │       ├── enricher.py
+│   │       └── tabular.py  # TabularFileSource (generic connector)
 │   ├── datasets/           # Dataset adapters
-│   │   └── chicago_crime/
-│   │       ├── schema.py
-│   │       ├── mapping.py
-│   │       ├── context/
-│   │       │   ├── weather.py
-│   │       │   ├── events.py
-│   │       │   └── demographics.py
-│   │       └── recipes/
-│   │           └── chicago_crime_v1.py
+│   │   ├── chicago_crime/
+│   │   │   ├── schema.py
+│   │   │   ├── mapping.py
+│   │   │   ├── context/
+│   │   │   │   ├── weather.py
+│   │   │   │   ├── events.py
+│   │   │   │   └── demographics.py
+│   │   │   └── recipes/
+│   │   │       └── chicago_crime_v1.py
+│   │   ├── beijing_air_quality/  # Second-domain proof (phase 3)
+│   │   └── geolife/              # Trajectory proof (phase 3)
+│   ├── evaluation/         # Blocked splits, walk-forward, metrics (phase 4)
 │   ├── recipes/            # Recipe mechanism
 │   │   ├── base.py
 │   │   └── registry.py
@@ -62,12 +71,19 @@ eventflow/
 │   │   ├── test_schema.py
 │   │   └── test_event_frame.py
 │   ├── datasets/
+│   ├── evaluation/
 │   ├── recipes/
 │   │   └── test_registry.py
 │   ├── integration/
+│   ├── test_readme_examples.py   # Executes the README Quick Start
+│   ├── test_docs_examples.py     # Executes the API reference examples
 │   └── conftest.py
 └── scripts/                # Example scripts
     ├── run_chicago_recipe.py
+    ├── replay_beijing.py
+    ├── replay_geolife.py
+    ├── phase3_connectors_demo.py
+    ├── phase4_chicago_evaluation.py
     └── run_experiment.py
 ```
 
@@ -140,14 +156,38 @@ python scripts/run_experiment.py
 - **Schema Definitions**: Pydantic models for events and context sources
 - **Spatial Operations**: Grid construction, coordinate transformation, zone assignment
 - **Temporal Operations**: Time binning, component extraction, temporal alignment
-- **Feature Engineering**: Aggregations, moving windows, categorical encoding
+- **Feature Engineering**: Panel completion with explicit zeros, lags, rolling
+  windows, EWMA, trend, recency, burstiness, zero features, per-category
+  counts/shares/entropy, multi-scale spatial lag, Gaussian KDE / STKDE,
+  near-repeat counts, fixed-kernel Hawkes excitation — all under the
+  causality convention "a feature row at bin `t` predicts bin `t + 1`"
+  (see `docs/api_reference.md` and `docs/design-notes/phase1-causality.md`)
 - **Pipeline**: Composable step-based transformations
-- **Context Enrichment**: Generic framework for joining external data
+- **Context Enrichment**: Generic framework for joining external data, plus
+  the `TabularFileSource` connector for local CSV/Parquet files
 
 ### Dataset Module
 - **Chicago Crime Adapter**: Complete implementation with schema, mapping, and loaders
-- **Context Sources**: Weather, special events, demographics sources
+- **Beijing Air Quality Adapter** (phase 3): Sensor panel proof — same generic
+  steps, no Chicago-specific assumption; see `docs/api_reference.md` and
+  `docs/design-notes/phase3-beijing.md`
+- **GeoLife Adapter** (phase 3): GPS trajectories with kinematics; the steps
+  that do and do not apply are decided in
+  `docs/design-notes/phase3-geolife-boundary.md`
+- **Context Sources**: Weather, special events, demographics sources (Chicago
+  ones unwired and untested); the generic `TabularFileSource` connector loads
+  any local CSV/Parquet file as context
 - **Recipes**: Pre-built feature engineering pipelines
+  (`chicago_crime_v1`, `beijing_air_quality_v1`, `geolife_v1`)
+
+### Evaluation Module (phase 4)
+- **Blocked splits**: Temporal, spatial, entity and combined time × space
+  splits with an embargo gap and a `validate_split` negative control
+- **Walk-forward**: Expanding-window folds with per-fold refit of fittable
+  steps (`CategoryCountsStep.fit/freeze`)
+- **Metrics**: PAI (hotspot ranking) and PR-AUC as pure functions
+- **Synthetic ground truth**: Planted-structure panels in
+  `tests/evaluation/synthetic.py` (test-only helper)
 
 ### Recipe Module
 - **Base Recipe Interface**: Abstract base class for all recipes
@@ -211,7 +251,12 @@ pytest
 
 - **Import Errors**: You'll see import errors until dependencies are installed with `pip install -e ".[dev]"`
 - **Data Not Included**: Raw data files are not part of the repository - configure paths in YAML files
-- **Production Ready**: Core abstractions are production-ready; some implementations are placeholders for extension
+- **Doc examples are executed**: Every code example in `docs/api_reference.md`
+  is run by `tests/test_docs_examples.py`, and the README Quick Start by
+  `tests/test_readme_examples.py` — if a doc example breaks, the suite fails
+- **Demo notebook is unverified**: `notebooks/demo_chicago_crime.ipynb` is not
+  executed in CI; see `notebooks/README.md` for the last execution attempt
+  and why it fails (missing `chicago_crime_data_cli` data directory)
 
 ## Resources
 

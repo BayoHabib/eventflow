@@ -242,3 +242,78 @@ le travail outille l'évaluation anti-fuite (objectifs 17 et 26,
 toujours partiels, précisés) et fige le cadrage des statistiques
 ajustées sans clore de nouvel objectif. Les objectifs 21–24 restent
 volontairement non atteints : ils sont hors phase 4.
+
+## Après phase 5
+
+**Mesuré par `make audit`, 2026-11-16** (voir `audit/phase-5/manifest.json`) :
+verdict PASS (5/5 : ruff, black, mypy, pytest, replay), 1 046 tests
+passés, 2 ignorés, couverture 86 % (6 982 statements, 979 missed) ;
+replay Chicago T1 2024 inchangé : 1 908 088 lignes × 90 colonnes,
+somme `count` = 60 235, 1 851 597 lignes à zéro explicite.
+Replays Beijing et GeoLife rejoués et identiques aux valeurs phase 3
+(Beijing 420 768 lignes × 64 colonnes, NA PM2.5 8 739 → 8 739 ;
+GeoLife sous-ensemble 1 471 lignes × 26 colonnes, panel count
+112 lignes ; voir `audit/phase-5/beijing_replay.json` et
+`audit/phase-5/geolife_replay.json`). Paquet construit depuis une
+copie propre : `eventflow-0.1.0.tar.gz` + `eventflow-0.1.0-py3-none-any.whl`,
+`twine check` PASSED sur les deux ; installation propre vérifiée dans
+un venv neuf (wheel seule, `eventflow --help`, `validate` 21 étapes,
+quick start 120 événements → 516 lignes, somme `count` = 120).
+
+- **Objectif 21 — Non atteint → Atteint.** Les alias sont ajoutés et
+  testés (`SequenceOutput.attention_mask`, `StreamOutput.inter_event_times`,
+  `StreamOutput.state_features` — propriétés en lecture seule retournant
+  l'objet tableau identique, anciens noms inchangés, sérialisation
+  avec les deux clés, désérialisation acceptant les deux) ; l'accesseur
+  uniforme `.data` existe sur les 5 sorties ; la convention
+  `feature_names` est actée (`docs/design-notes/phase5-adapter-naming.md`,
+  `tests/core/test_adapter_aliases.py`, 21 tests).
+- **Objectif 23 — Non atteint → Partiel.** Le paquet se construit et
+  passe `twine check` ; `CHANGELOG.md` (Keep a Changelog, 0.1.0 Alpha,
+  explicitement non publié) et la procédure de release existent
+  (`docs/release.md`). Il reste partiel car rien n'a été publié sur
+  PyPI : la publication elle-même est un geste du mainteneur, et
+  l'adresse de contact auteur réelle manque encore (noté dans
+  `docs/release.md`).
+- **Objectif 24 — Non atteint → Partiel.** L'environnement d'exemple
+  reproductible existe : `examples/Dockerfile` (exemples uniquement,
+  pas de service), `examples/chicago_quickstart.py` exécuté
+  (test `tests/integration/test_examples.py`), procédure d'installation
+  propre documentée et vérifiée dans un venv neuf
+  (`examples/README.md`). Il reste partiel car le Dockerfile lui-même
+  n'a pas été construit : aucun Docker dans cette VM.
+- **Objectif 22 — Non atteint (inchangé, hors périmètre).** Aucun
+  service FastAPI : sorti du périmètre de release par décision du
+  mainteneur (retouche TODO, PR #36) ; les services de prédiction
+  restent des applications aval optionnelles.
+- **Objectif 18 — Partiel (précisé, statut inchangé).** La
+  documentation API couvre désormais les phases 1–4
+  (`docs/api_reference.md` réécrit : panel, dynamiques, catégoriel +
+  fit/freeze, spatial v2, évaluation, connecteurs, recettes Beijing /
+  GeoLife ; chaque exemple est exécuté par `tests/test_docs_examples.py`,
+  32 tests) ; README, GETTING_STARTED, datasets et architecture
+  corrigés (recettes fantômes supprimées, exemples aux vrais Steps).
+  Il reste partiel : pas de Sphinx/MkDocs, pas de site ReadTheDocs.
+- **Objectif 6 — Atteint (chiffres mis à jour).** 1 046 tests, 86 % de
+  couverture (mesurés par `make audit`).
+- **Objectif 13 — Atteint (inchangé).** Recette Chicago rejouée par
+  `make audit` : 1 908 088 lignes × 90 colonnes, somme `count` =
+  60 235 (voir `audit/phase-5/replay_chicago.json`).
+- **Objectif 25 — Atteint (maintenu).** Couverture 86 % après phase 5
+  (voir `audit/phase-5/manifest.json`).
+- **Objectif 27 — Partiel (inchangé).** Le partitionnement de sortie
+  (`output.partition_by`) n'est toujours pas implémenté (toujours une
+  erreur bloquante dans la CLI).
+- **Objectif 28 — Non vérifiable (inchangé, précisé).** Le notebook de
+  démo a été exécuté en phase 5 et échoue (`ValueError: cannot concat
+  empty list` — il lit des CSV mensuels absents ici) ; il porte
+  désormais une mention UNVERIFIED explicite en première cellule et
+  `notebooks/README.md` consigne l'échec (`tests/test_docs_examples.py`
+  ne l'exécute pas). Ses chiffres (ρ = 0,515, 104 anomalies) ne sont
+  présentés nulle part comme des faits.
+
+**Compteur après phase 5 : 16 atteints, 10 partiels, 1 non atteint,
+1 non vérifiable.** Mouvements : objectif 21 (non atteint → atteint),
+objectifs 23 et 24 (non atteints → partiels). Le seul objectif non
+atteint restant est le service FastAPI (objectif 22), hors périmètre
+par décision du mainteneur.

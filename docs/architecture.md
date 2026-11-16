@@ -88,11 +88,17 @@ Central abstraction that wraps:
 A sequence of Steps that transform EventFrames:
 
 ```python
+from eventflow.core.context import EnricherStep, TabularFileSource, TemporalJoin
+from eventflow.core.steps import AssignToGridStep, GridAggregationStep
+from eventflow.core.steps.temporal import TimeBinsStep
+
+# weather.csv: ts,temp_c / 2024-01-01 00:00:00,10.0 / 2024-01-01 01:00:00,11.0
+weather_source = TabularFileSource("weather.csv", timestamp_col="ts", value_cols=["temp_c"])
 pipeline = Pipeline([
-    SpatialGridStep(size_m=300),
-    TemporalBinStep(bin_size="6h"),
-    FeatureAggregationStep(),
-    ContextEnricherStep(weather_source, temporal_join),
+    AssignToGridStep(grid_size_m=300),
+    TimeBinsStep(bin_size="6h"),
+    GridAggregationStep(grid_col="grid_id"),
+    EnricherStep(weather_source, TemporalJoin(strategy="nearest")),
 ])
 result = pipeline.run(event_frame)
 ```

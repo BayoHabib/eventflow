@@ -29,14 +29,75 @@ time_zone: "America/Chicago"
 ```
 
 **Available Recipes**:
-- `chicago_crime_v1`: Baseline spatial-temporal features
-- `chicago_crime_with_weather`: Includes weather context
-- `chicago_crime_full`: All context sources
+- `chicago_crime_v1`: Baseline spatial-temporal features — 300 m cells,
+  6-hour bins, completed panel with explicit zeros, per-category counts,
+  lags, rolling means, EWMA, cyclical encodings, multi-scale spatial lag,
+  KDE, STKDE, near-repeat, Hawkes, trend, recency and zero features
+  (see `docs/api_reference.md` and `configs/recipes/chicago_crime_v1.yaml`).
+  Replay on real Q1 2024 data: 1,908,088 rows × 90 columns,
+  sum `count` = 60,235.
 
 **Context Sources**:
 - Weather: NOAA hourly weather data
 - Special events: Chicago special events calendar
 - Demographics: Census tract demographics
+
+> These context sources exist but are unwired and untested
+> (experimental); enabling any `context.<source>.enabled` in
+> `chicago_crime_v1` raises a blocking error. For new datasets, use the
+> generic `TabularFileSource` connector instead (see
+> `docs/api_reference.md`).
+
+### Beijing Multi-Site Air Quality Data
+
+**Source**: Chen, S. (2017). Beijing Multi-Site Air Quality [Dataset].
+UCI Machine Learning Repository. DOI 10.24432/C5RK5G.
+
+**Description**: Hourly air-quality measurements from 12 monitoring
+stations, 2013-03-01 → 2017-02-28 (35,064 hours each); 6 pollutants
+(PM2.5, PM10, SO2, NO2, CO, O3) + 6 meteorological variables
+(TEMP, PRES, DEWP, RAIN, wd, WSPM). Missing values are the literal
+string `NA`. Total 420,768 rows.
+
+**Loader**: `load_beijing_air_quality(raw_path, config=None,
+apply_cleaning=True)` in `src/eventflow/datasets/beijing_air_quality/mapping.py`
+— accepts a directory of per-station CSVs, one CSV, or one Parquet file.
+
+**Available Recipes**:
+- `beijing_air_quality_v1`: Station-hour panel — unit = station, bin =
+  hour, only temporal steps (lags 1 h / 24 h / 168 h, rolling means
+  24 h / 168 h, calendar encoding). `CompletePanelStep` runs with
+  `measure_cols` (measurements are never zero-filled). Replay: 420,768
+  rows × 64 columns, count sum 420,768, NA PM2.5 8,739 → 8,739.
+  Honest limit: the shipped panel is already complete, so the proof
+  covers gaps / missing-stays-missing and per-station separation, not
+  irregular sampling — see `docs/design-notes/phase3-beijing.md`.
+
+### GeoLife GPS Trajectories
+
+**Source**: Microsoft Research GeoLife Trajectories 1.3.
+
+**Description**: GPS fixes from 182 users (2007–2012). One fix is one
+event; entity = user (`user_id`), a trajectory (`trajectory_id`, the
+`.plt` file stem) groups the fixes of one continuous log. Coordinates
+are WGS 84, projected to UTM 50N (EPSG:32650) for distance work.
+
+**Loader**: `load_geolife(paths, *, user_ids=None, metadata=None)` in
+`src/eventflow/datasets/geolife/loader.py` — loads `.plt` files, one
+trajectory each.
+
+**Available Recipes**:
+- `geolife_v1`: CRS transform → trajectory kinematics (distance,
+  elapsed time, speed; speed withheld across gaps > 300 s and on
+  `dt <= 0`) → temporal components → cyclical calendar →
+  inter-arrival → rows-mode lag / rolling mean of speed → 5-min bins →
+  100 m grid → fix counts per (cell, bin). Replay on the documented
+  subset (users `010` and `000`, 1,471 fixes): point-level output
+  1,471 rows × 26 columns; panel 112 rows × 8 columns, count sum
+  1,471. The panel-family steps were evaluated on the subset and do
+  **not** apply as-is — see the verdict table in
+  `docs/design-notes/phase3-geolife-boundary.md`. Timezone is an
+  assumption (`.plt` times labelled `Asia/Shanghai`, no conversion).
 
 ## Adding a New Dataset
 
@@ -133,16 +194,15 @@ In `recipes/`, create pre-built pipelines:
 ```python
 from eventflow.recipes.base import BaseRecipe
 from eventflow.core.pipeline import Pipeline
+from eventflow.core.steps.temporal import TimeBinsStep, TemporalLagStep
 
 class YourDatasetV1Recipe(BaseRecipe):
-    def __init__(self, config: RecipeConfig):
-        self.config = config
-    
     def build_pipeline(self) -> Pipeline:
         return Pipeline([
-            SpatialGridStep(size_m=self.config.grid.size_m),
-            TemporalBinStep(bin_size=self.config.temporal.time_bin),
-            FeatureAggregationStep(),
+            TimeBinsStep(bin_size=self.config.temporal.time_bin),
+            TemporalLagStep(
+                value_cols=["count"], lag_periods=[1], time_unit="1d",
+            ),
         ])
 ```
 

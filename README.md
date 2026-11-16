@@ -1,7 +1,7 @@
 # EventFlow
 
 [![Test & Lint](https://github.com/BayoHabib/eventflow/actions/workflows/ci.yml/badge.svg)](https://github.com/BayoHabib/eventflow/actions)
-[![Coverage](https://img.shields.io/badge/coverage-82%25-yellow.svg)](https://github.com/BayoHabib/eventflow)
+[![Coverage](https://img.shields.io/badge/coverage-86%25-yellow.svg)](https://github.com/BayoHabib/eventflow)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](https://github.com/BayoHabib/eventflow/releases)
@@ -59,22 +59,26 @@ EventFlow transforms raw event data (crime records, sensor readings, transaction
 - ⏰ **Temporal features** - time bins, rolling windows, inter-event times
 - 📊 **Point process features** - intensity estimation, kernel smoothing
 - 🧪 **Composable pipelines** - registry-based step system
-- ✅ **Validated** - 564 tests, 82% coverage (measured by `make audit`, 2026-11-15; see `docs/audit/`)
+- ✅ **Validated** - 1,046 tests passing, 86% coverage (measured 2026-11-16; see `docs/audit/`)
 
 ## What EventFlow does not do
 
 - **No model training and no prediction serving.** EventFlow prepares
   ML-ready features; models live downstream (e.g. `chicago_crime_api`).
-- **No per-category or rolling-window features yet.** `categorical_features`
-  and `aggregation_windows` are planned for phase 1; declaring them in a
-  recipe now raises a blocking error instead of being silently ignored
+- **Per-category and rolling-window features are opt-in, not default.**
+  `CategoryCountsStep`, `TemporalLagStep`, `MovingAverageStep` and the
+  phase-1/2 families are built by the recipe only when the corresponding
+  `features.*` keys are set in the recipe YAML (see
+  `docs/api_reference.md`); declaring them raises a blocking error if a
+  required companion key is missing, instead of being silently ignored
   (see `docs/design-notes/chicago-declared-features.md`).
-- **No zero-count pairs in the Chicago output.** The recipe counts observed
-  cell/bin pairs only; zero-count pairs require a separate completion step.
 - **No partitioned output.** `output.partition_by` is not implemented; the
   CLI writes a single file.
 - **No context enrichment in the Chicago recipe.** Weather, events and
-  demographics sources exist but are unwired and untested (experimental).
+  demographics sources exist but are unwired and untested (experimental);
+  enabling any `context.<source>.enabled` raises a blocking error. For
+  new datasets, use the generic `TabularFileSource` connector instead
+  (see `docs/api_reference.md`).
 - **No FastAPI service, PyPI release or Docker image yet.** These are the
   open high-priority TODO items; see `TODO.md`.
 
@@ -113,8 +117,12 @@ The bundled recipe keeps **300-meter cells and six-hour bins**. Its fixed grid o
 defaults to `(0, 0)` in projected meters, so cell identifiers remain stable across batches.
 Set `grid.origin: [x, y]` to choose another fixed origin. Output contains `grid_id`,
 `time_bin`, `count`, cell-center coordinates, bin-start `date`, and configured calendar
-components. It counts observed cell/bin pairs; zero-count pairs require a separate
-completion step. Extended categorical and moving-window features remain outside this baseline.
+components. The shipped YAML completes the panel with explicit zeros
+(`complete_panel: true`: 5,242 cells × 364 bins = 1,908,088 rows, sum `count` =
+60,235) and builds the phase-1 and phase-2 feature families — per-category
+counts, lags, rolling means, EWMA, cyclical encodings, multi-scale spatial
+lag, KDE, STKDE, near-repeat, Hawkes, trend, recency and zero features
+(see `docs/api_reference.md`).
 
 For custom spatial pipelines, both CRS transformations update the active coordinate
 columns in `EventSchema`. Meter-based grid operations reject geographic and foot-based
@@ -211,12 +219,18 @@ checked by `tests/test_readme_examples.py`):
 from eventflow.core.steps import (
     # Temporal
     TimeBinsStep, ExtractTemporalComponentsStep, CalendarEncodingStep,
-    TemporalLagStep, MovingAverageStep,
+    TemporalLagStep, MovingAverageStep, FillNullStep,
+    RecencyWeightStep, InterArrivalStep,
+
+    # Panel completion, categorical counts, dynamics
+    CompletePanelStep, CategoryCountsStep,
+    EWMAMeanStep, TrendStep, TimeSinceLastEventStep,
+    BurstinessStep, ZeroFeaturesStep,
 
     # Spatial
     AssignToGridStep, AssignToZonesStep, GridAggregationStep,
     SpatialLagStep, TransformCRSStep, ComputeDistancesStep,
-    KDEStep, LocalMoranStep,
+    KDEStep, LocalMoranStep, GetisOrdStep,
 
     # Point Process
     HawkesKernelStep, ConditionalIntensityStep,
@@ -224,7 +238,16 @@ from eventflow.core.steps import (
 
     # Streaming
     StreamingWindowStep, StreamingInterEventStep, StreamingHawkesStep,
+
+    # Observation
+    ObservationPanelStep,
 )
+# Phase-2 steps are registered but not re-exported from
+# eventflow.core.steps — import them from their own modules:
+from eventflow.core.steps.density import KernelDensityStep, SpaceTimeKernelDensityStep
+from eventflow.core.steps.hawkes import HawkesExcitationStep
+from eventflow.core.steps.near_repeat import NearRepeatStep
+from eventflow.core.steps.spatial import MultiScaleSpatialLagStep
 from eventflow.core.steps.validation import (
     validate_temporal_ordering,
     validate_point_process_features,
@@ -246,17 +269,29 @@ eventflow/
 │   │   ├── steps/         # Pipeline steps
 │   │   │   ├── temporal.py
 │   │   │   ├── spatial.py
+│   │   │   ├── panel.py       # CompletePanelStep
+│   │   │   ├── dynamics.py    # EWMA, trend, recency, burstiness, zeros
+│   │   │   ├── categorical.py # CategoryCountsStep (fit/freeze)
+│   │   │   ├── density.py     # Gaussian KDE, space-time KDE
+│   │   │   ├── near_repeat.py # Near-repeat ring counts
+│   │   │   ├── hawkes.py      # Fixed-kernel Hawkes excitation
 │   │   │   ├── point_process.py
 │   │   │   ├── streaming.py
 │   │   │   └── validation.py
+│   │   ├── context/       # Context enrichment
+│   │   │   └── tabular.py # TabularFileSource (generic connector)
 │   │   ├── event_frame.py # Core EventFrame abstraction
 │   │   ├── spatial.py     # Spatial utilities
 │   │   └── temporal.py    # Temporal utilities
 │   ├── datasets/          # Dataset-specific loaders
+│   │   ├── chicago_crime/
+│   │   ├── beijing_air_quality/
+│   │   └── geolife/
+│   ├── evaluation/        # Blocked splits, walk-forward, metrics
 │   ├── recipes/           # Composable pipelines
 │   └── tracking/          # MLflow integration
 ├── notebooks/             # Demo notebooks
-├── tests/                 # 564 tests (measured by `make audit`, 2026-11-15)
+├── tests/                 # 1,046 tests passing (measured 2026-11-16)
 └── docs/                  # Documentation
 ```
 
@@ -274,11 +309,16 @@ See [`notebooks/demo_chicago_crime.ipynb`](notebooks/demo_chicago_crime.ipynb) f
    - Causal Inference
    - Anomaly Detection
 
-> **Unverified (phase 0):** the demo notebook is not executed in CI and
-> was not executed in the 2026-11-15 audit, so its figures (spatial
+> **Unverified (phase 0, confirmed 2026-11-16):** the demo notebook is not executed in CI
+> and was not executed in the 2026-11-15 audit, so its figures (spatial
 > correlation ρ = 0.515, 104 anomalies, etc.) are **not confirmed** — see
-> `docs/audit/known-limitations.md`. The recipe itself, by contrast, is
-> replayed on real Q1 2024 data by `make audit`.
+> `docs/audit/known-limitations.md`. A headless execution was attempted on
+> 2026-11-16 (scratch venv, `jupyter nbconvert --execute`): it fails in the
+> data-load cell with `ValueError: cannot concat empty list`, because the
+> notebook reads monthly CSVs from a `chicago_crime_data_cli` directory
+> that does not exist in this environment — see `notebooks/README.md`.
+> The recipe itself, by contrast, is replayed on real Q1 2024 data by
+> `make audit`.
 
 ## Development
 
